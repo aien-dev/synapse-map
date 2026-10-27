@@ -1,0 +1,612 @@
+note ======== JSON input: catalog, extra/map/skills JSONL, root crumbs, xerj hits ========
+note Every document is parsed by seed/json/json.om into a caller-owned tape; strings are decoded with
+note js_sget and copied into gpool. Kinds: 1 catalog, 2 extra JSONL, 3 map.jsonl, 4 skills.jsonl,
+note 5 root crumb of record r, 6 xerj search response.
+
+global gsk ulong 4096
+global gxr ulong 512
+
+text tkname "name"
+text tkdesc "description"
+text tkpurp "purpose"
+text tkrepo "repo"
+text tkpar "parent"
+text tkpst "parent_status"
+text tklay "layer"
+text tksrc "source"
+text tkrule "infer_rule"
+text tkdefb "default_branch"
+text tkpush "pushed_at"
+text tkbrf "brief"
+text tkarch "archived"
+text tkfork "fork"
+text tkurl "url"
+text tkorg "org"
+text tkrepos "repos"
+text tkext "extensions"
+text tkmap "map"
+text tkhits "hits"
+text tkid "_id"
+text tkscore "_score"
+text tkerrs "errors"
+text tcatalog "catalog"
+text textra "extra"
+text tdup "synapse-map: duplicate repo ignored: "
+text trepop "repo:"
+text tskillp "skill:"
+
+note sm_jstr: decode string token t into the pool; offset, length in SSLEN; -65 when refused
+fn sm_jstr src view uchar * tape view uint * t ulong to long
+sb = new uchar 65536 0
+k = js_sget src js_off tape t sb
+if lt k 0
+ret -65
+end
+o = get gst SPOOL
+for i ulong ulong k
+sm_pb get sb i
+end
+put gst SSLEN ulong k
+ret long o
+end
+
+note sm_jsf: string (or null) token v into record string cell rf = r * 16 + field
+fn sm_jsf src view uchar * tape view uint * v ulong rf ulong to long
+ty = js_type tape v
+if eq ty jsnull
+ret 0
+end
+if ne ty jsstr
+ret -65
+end
+o = sm_jstr src tape v
+if lt o 0
+ret o
+end
+put gro rf ulong o
+put grl rf get gst SSLEN
+ret 0
+end
+
+note sm_jbool: true/false token v into record flag cell rk
+fn sm_jbool tape view uint * v ulong rk ulong to long
+ty = js_type tape v
+if eq ty jstrue
+put grf rk 1
+ret 0
+end
+if eq ty jsfalse
+put grf rk 0
+ret 0
+end
+ret -65
+end
+
+note sm_jkw: key at src[o] is key number w of the fixed table below
+fn sm_jkw src view uchar * o ulong w ulong to bool
+if eq w 1
+ret js_streq src o tkhits
+end
+if eq w 2
+ret js_streq src o tkid
+end
+if eq w 3
+ret js_streq src o tkscore
+end
+if eq w 4
+ret js_streq src o tkext
+end
+if eq w 5
+ret js_streq src o tkmap
+end
+if eq w 6
+ret js_streq src o tkpar
+end
+if eq w 7
+ret js_streq src o tkpurp
+end
+if eq w 8
+ret js_streq src o tklay
+end
+if eq w 9
+ret js_streq src o tkorg
+end
+if eq w 10
+ret js_streq src o tkrepos
+end
+if eq w 11
+ret js_streq src o tkerrs
+end
+if eq w 12
+ret js_streq src o tkname
+end
+if eq w 13
+ret js_streq src o tkdesc
+end
+ret false
+end
+
+note sm_jkeyv: value token of key w in object t, jsnone when t is not an object or has no such key
+fn sm_jkeyv src view uchar * tape view uint * t ulong w ulong to ulong
+if ne js_type tape t jsobj
+ret jsnone
+end
+k = js_first tape t
+while ne k jsnone bound 999999
+if sm_jkw src js_off tape k w
+ret add k 1
+end
+k = js_mnext tape k
+end
+ret jsnone
+end
+
+note sm_jkey: one member of a repo object (catalog, extra or map record) into record r; unknown keys ignored
+fn sm_jkey src view uchar * tape view uint * k ulong r ulong to long
+o = js_off tape k
+v = add k 1
+b = mul r 16
+if js_streq src o tkname
+ret sm_jsf src tape v add b FNAME
+end
+if or js_streq src o tkdesc js_streq src o tkpurp
+ret sm_jsf src tape v add b FPUR
+end
+if js_streq src o tkrepo
+ret sm_jsf src tape v add b FREPO
+end
+if js_streq src o tklay
+ret sm_jsf src tape v add b FLAY
+end
+if js_streq src o tkdefb
+ret sm_jsf src tape v add b FDEF
+end
+if js_streq src o tkpush
+ret sm_jsf src tape v add b FPUSH
+end
+if js_streq src o tkurl
+ret sm_jsf src tape v add b FURL
+end
+if js_streq src o tksrc
+ret sm_jsf src tape v add b FSRC
+end
+if js_streq src o tkrule
+ret sm_jsf src tape v add b FRULE
+end
+if js_streq src o tkpst
+ret sm_jsf src tape v add b FPST
+end
+if js_streq src o tkpar
+if eq js_type tape v jsnull
+sm_ks r KPNUL 1
+ret 0
+end
+ret sm_jsf src tape v add b FPAR
+end
+if js_streq src o tkbrf
+if eq js_type tape v jsnull
+sm_ks r KBNUL 1
+ret 0
+end
+ret sm_jsf src tape v add b FBRF
+end
+if js_streq src o tkarch
+ret sm_jbool tape v add b KARCH
+end
+if js_streq src o tkfork
+ret sm_jbool tape v add b KFORK
+end
+ret 0
+end
+
+note sm_setname: FNAME = the part of FREPO after its last '/'
+fn sm_setname r ulong to void
+o = sm_fo r FREPO
+n = sm_fl r FREPO
+s = ulong 0
+for i ulong n
+if eq get gpool add o i 47
+s = add i 1
+end
+end
+sm_fset r FNAME add o s sub n s
+end
+
+note sm_jfin: complete record r (kind sk) and count it unless its repo is already present
+fn sm_jfin r ulong sk ulong to long
+if eq sk 3
+if eq sm_fl r FREPO 0
+ret -65
+end
+sm_setname r
+else
+no = sm_fo r FNAME
+nl = sm_fl r FNAME
+if eq nl 0
+ret -65
+end
+if lt sm_pfind no nl 47 nl
+sm_fset r FREPO no nl
+sm_setname r
+else
+o = sm_pcp get gst SORGO get gst SORGL
+sm_pb 47
+x = sm_pcp no nl
+sm_fset r FREPO o add add get gst SORGL 1 nl
+end
+if eq sk 1
+sm_fsett r FSRC tcatalog
+else
+sm_fsett r FSRC textra
+end
+end
+d = sm_find sm_fo r FREPO sm_fl r FREPO
+if ne d SNONE
+sm_err tdup
+sm_errp sm_fo r FREPO sm_fl r FREPO
+sm_errnl
+ret 0
+end
+put gst SNREC add r 1
+ret 1
+end
+
+fn sm_jrepo src view uchar * tape view uint * t ulong sk ulong to long
+if ne js_type tape t jsobj
+ret -65
+end
+r = get gst SNREC
+if ge r 1000
+ret -12
+end
+for f ulong 16
+sm_fset r f 0 0
+sm_ks r f 0
+end
+k = js_first tape t
+while ne k jsnone bound 999999
+e = sm_jkey src tape k r
+if lt e 0
+ret e
+end
+k = js_mnext tape k
+end
+ret sm_jfin r sk
+end
+
+fn sm_jcat src view uchar * tape view uint * to long
+v = sm_jkeyv src tape 0 9
+if ne v jsnone
+if eq js_type tape v jsstr
+o = sm_jstr src tape v
+if lt o 0
+ret o
+end
+put gst SORGO ulong o
+put gst SORGL get gst SSLEN
+end
+end
+a = sm_jkeyv src tape 0 10
+if eq a jsnone
+ret -65
+end
+if ne js_type tape a jsarr
+ret -65
+end
+e = js_first tape a
+while ne e jsnone bound 999999
+x = sm_jrepo src tape e 1
+if lt x 0
+ret x
+end
+e = js_enext tape e
+end
+ret 0
+end
+
+note sm_jcrumb: purpose, layer and extensions.map.parent of a root crumb into record r
+fn sm_jcrumb src view uchar * tape view uint * r ulong to long
+if ne js_type tape 0 jsobj
+ret -65
+end
+b = mul r 16
+v = sm_jkeyv src tape 0 7
+if ne v jsnone
+x = sm_jsf src tape v add b FCPUR
+end
+v = sm_jkeyv src tape 0 8
+if ne v jsnone
+x = sm_jsf src tape v add b FCLAY
+end
+e = sm_jkeyv src tape 0 4
+if eq e jsnone
+ret 0
+end
+m = sm_jkeyv src tape e 5
+if eq m jsnone
+ret 0
+end
+p = sm_jkeyv src tape m 6
+if eq p jsnone
+ret 0
+end
+ret sm_jsf src tape p add b FCPAR
+end
+
+fn sm_sb src view uchar * p ulong to uchar
+if lt p len src
+ret get src p
+end
+ret 0
+end
+
+fn sm_isdig c uchar to bool
+ret and ge c 48 le c 57
+end
+
+note sm_jnum: a JSON number lexeme at src[o] in millionths (nonnegative; negative values give 0)
+fn sm_jnum src view uchar * o ulong to ulong
+p = o
+if eq sm_sb src p 45
+ret 0
+end
+v = ulong 0
+for i ulong 20
+c = sm_sb src p
+if not sm_isdig c
+break
+end
+if lt v 100000000000
+v = add mul v 10 ulong sub c 48
+end
+p = add p 1
+end
+f = ulong 0
+s = ulong 1000000
+if eq sm_sb src p 46
+p = add p 1
+for i ulong 40
+c = sm_sb src p
+if not sm_isdig c
+break
+end
+if gt s 1
+s = div s 10
+f = add f mul s ulong sub c 48
+end
+p = add p 1
+end
+end
+v = add mul v 1000000 f
+c = sm_sb src p
+if or eq c 101 eq c 69
+ret sm_jexp src add p 1 v
+end
+ret v
+end
+
+fn sm_jexp src view uchar * p ulong v ulong to ulong
+q = p
+ng = false
+if eq sm_sb src q 45
+ng = true
+q = add q 1
+end
+if eq sm_sb src q 43
+q = add q 1
+end
+e = ulong 0
+for i ulong 6
+c = sm_sb src q
+if not sm_isdig c
+break
+end
+e = add mul e 10 ulong sub c 48
+q = add q 1
+end
+x = v
+for i ulong 20
+if ge i e
+break
+end
+if ng
+x = div x 10
+else
+if lt x 1000000000000
+x = mul x 10
+end
+end
+end
+ret x
+end
+
+note sm_skfind: skill whose name equals the pool slice, or SNONE
+fn sm_skfind o ulong n ulong to ulong
+for s ulong get gst SNSKL
+if sm_peq get gsk mul s 4 get gsk add mul s 4 1 o n
+ret s
+end
+end
+ret SNONE
+end
+
+note sm_jhits: {"hits":{"hits":[{"_id":"repo:..|skill:..","_score":x}]}} into gxr (code, millionths)
+fn sm_jhits src view uchar * tape view uint * to long
+put gst SNXR 0
+h = sm_jkeyv src tape 0 1
+if eq h jsnone
+ret 0
+end
+a = sm_jkeyv src tape h 1
+if eq a jsnone
+ret 0
+end
+if ne js_type tape a jsarr
+ret -65
+end
+e = js_first tape a
+while ne e jsnone bound 999999
+i = sm_jkeyv src tape e 2
+s = sm_jkeyv src tape e 3
+if and ne i jsnone ne s jsnone
+o = sm_jstr src tape i
+if lt o 0
+ret o
+end
+x = sm_jhit ulong o get gst SSLEN sm_jnum src js_off tape s
+end
+e = js_enext tape e
+end
+ret 0
+end
+
+note sm_jhit: map a hit id to a code (record index, or 1048576 + skill index) and append it
+fn sm_jhit o ulong n ulong sc ulong to long
+k = get gst SNXR
+if ge k 256
+ret 0
+end
+c = SNONE
+if gt n 5
+if sm_pteq o 5 trepop
+r = sm_find add o 5 sub n 5
+if ne r SNONE
+c = r
+end
+end
+end
+if gt n 6
+if sm_pteq o 6 tskillp
+s = sm_skfind add o 6 sub n 6
+if ne s SNONE
+c = add s 1048576
+end
+end
+end
+if eq c SNONE
+ret 0
+end
+put gxr mul k 2 c
+put gxr add mul k 2 1 sc
+put gst SNXR add k 1
+ret 0
+end
+
+fn sm_jskill src view uchar * tape view uint * t ulong to long
+s = get gst SNSKL
+if ge s 1000
+ret -12
+end
+v = sm_jkeyv src tape t 12
+if eq v jsnone
+ret -65
+end
+if ne js_type tape v jsstr
+ret -65
+end
+o = sm_jstr src tape v
+if lt o 0
+ret o
+end
+put gsk mul s 4 ulong o
+put gsk add mul s 4 1 get gst SSLEN
+put gsk add mul s 4 2 0
+put gsk add mul s 4 3 0
+d = sm_jkeyv src tape t 13
+if ne d jsnone
+if eq js_type tape d jsstr
+o = sm_jstr src tape d
+if lt o 0
+ret o
+end
+put gsk add mul s 4 2 ulong o
+put gsk add mul s 4 3 get gst SSLEN
+end
+end
+put gst SNSKL add s 1
+ret 1
+end
+
+fn sm_jdoc src view uchar * tape view uint * kind ulong r ulong to long
+if eq kind 1
+ret sm_jcat src tape
+end
+if eq kind 5
+ret sm_jcrumb src tape r
+end
+ret sm_jhits src tape
+end
+
+fn sm_jline src view uchar * tape view uint * kind ulong to long
+if eq kind 4
+ret sm_jskill src tape 0
+end
+ret sm_jrepo src tape 0 kind
+end
+
+fn sm_blank p ulong m ulong to bool
+for i ulong m
+c = get gfile add p i
+if not or eq c 32 or eq c 13 eq c 9
+ret false
+end
+end
+ret true
+end
+
+note sm_jload: parse gfile[0, SFLEN) as kind (whole document for 1, 5, 6; one object per line otherwise).
+note Returns >= 0, -65 malformed (line number in SBAD for JSONL), -27 too large, -12 table full.
+fn sm_jload kind ulong r ulong to long
+src = new uchar 983040 0
+tape = new uint 262160 0
+x = js_init tape 983040 64
+n = get gst SFLEN
+put gst SBAD 0
+if or eq kind 1 or eq kind 5 eq kind 6
+if gt n len src
+ret -27
+end
+for i ulong n
+put src i get gfile i
+end
+k = js_parse src tape n
+if lt k 0
+ret -65
+end
+ret sm_jdoc src tape kind r
+end
+p = ulong 0
+ln = ulong 0
+while lt p n bound 999999
+e = p
+while lt e n bound 999999
+if eq get gfile e 10
+break
+end
+e = add e 1
+end
+m = sub e p
+ln = add ln 1
+if not sm_blank p m
+if gt m len src
+put gst SBAD ln
+ret -27
+end
+for i ulong m
+put src i get gfile add p i
+end
+k = js_parse src tape m
+if lt k 0
+put gst SBAD ln
+ret -65
+end
+y = sm_jline src tape kind
+if lt y 0
+put gst SBAD ln
+ret y
+end
+end
+p = add e 1
+end
+ret long ln
+end

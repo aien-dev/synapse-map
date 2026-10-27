@@ -1,0 +1,579 @@
+note ======== commands ========
+
+global gsc ulong 1024
+global gsm ulong 1024
+global gcb ulong 1024
+global gpick ulong 1024
+global gskl ulong 1024
+global gsks ulong 1024
+global gskc ulong 1024
+global gtop ulong 4096
+global gip uchar 64
+
+const SNOX ulong 26
+const SMAXL ulong 27
+const SMAXS ulong 28
+const SHSEM ulong 29
+
+text tusage "usage: synapse-map [--home DIR] COMMAND ...\n  import --catalog FILE [--extra FILE] [--crumbs DIR] [--infer FILE]\n  index [--topics FILE] [--skills FILE] [--xerj IP:PORT] [--index NAME]\n  where TASK [--limit N] [--topics FILE] [--skills FILE] [--xerj IP:PORT] [--index NAME] [--no-xerj]\n  tree [--text]\n  check [--min-jaccard MILLI] [--xerj IP:PORT] [--index NAME] [--no-xerj]\n  new NAME --parent OWNER/REPO[@REF] --purpose TEXT [--layer L] --dir DIR [--publish [--dry-run]]\nexit: 0 ok, 1 findings, 4 not found, 64 usage, 65 malformed input, 70 internal, 75 temporary\n"
+text tfhome "--home"
+text tfcat "--catalog"
+text tfextra "--extra"
+text tfcrumbs "--crumbs"
+text tfinfer "--infer"
+text tftopics "--topics"
+text tfskills "--skills"
+text tflimit "--limit"
+text tfxerj "--xerj"
+text tfindex "--index"
+text tfnox "--no-xerj"
+text tftext "--text"
+text tfminj "--min-jaccard"
+text tfparent "--parent"
+text tfpurp "--purpose"
+text tflayer "--layer"
+text tfdir "--dir"
+text tvfimp "--home --catalog --extra --crumbs --infer"
+text tvfidx "--home --topics --skills --xerj --index"
+text tvfwh "--home --limit --topics --skills --xerj --index"
+text tvfhome "--home"
+text tvfchk "--home --min-jaccard --xerj --index"
+text tvfnew "--home --parent --purpose --layer --dir"
+text tswnone ""
+text tswnox "--no-xerj"
+text tswtext "--text"
+text tmapf "map.jsonl"
+text tskillf "skills.jsonl"
+text tinferf "infer.tsv"
+text ttopicf "topics.tsv"
+text tcrumbx ".crumb"
+text thomev "AIEN_COORD_HOME="
+text thomee "HOME="
+text tpathe "PATH="
+text thomesf "/.local/state/aien-coord"
+text tdefidx "aien-map"
+text tdeforg "aien-dev"
+text tpre "synapse-map: "
+text tnotfnd ": not found"
+text tmalf ": malformed input"
+text tline " line "
+text ttoobig ": too large or too many entries"
+text tioerr ": read or write failed"
+text tnohome "synapse-map: no home: pass --home, or set AIEN_COORD_HOME or HOME\n"
+text tbadnum "synapse-map: bad number for "
+text tnomap "synapse-map: no map.jsonl in the home; run synapse-map import first\n"
+
+fn sm_usage to void
+sm_err tusage
+sm_die 64
+end
+
+note sm_lderr: report a failed load of gpath and exit (ENOENT 4; malformed or oversized 65; else 70)
+fn sm_lderr x long to void
+put gst SOUT 0
+sm_err tpre
+k = write 2 gpath 0 get gst SPLEN
+if eq x -2
+sm_err tnotfnd
+sm_errnl
+sm_die 4
+end
+if eq x -65
+sm_err tmalf
+if gt get gst SBAD 0
+sm_err tline
+sm_on get gst SBAD
+k = write 2 gout 0 get gst SOUT
+put gst SOUT 0
+end
+sm_errnl
+sm_die 65
+end
+if or eq x -27 eq x -12
+sm_err ttoobig
+sm_errnl
+sm_die 65
+end
+sm_err tioerr
+sm_errnl
+sm_die 70
+end
+
+fn sm_anum i ulong to ulong
+o = sm_ao i
+n = sm_al i
+if or eq n 0 gt n 9
+ret SNONE
+end
+v = ulong 0
+for j ulong n
+c = get gab add o j
+if not sm_isdig c
+ret SNONE
+end
+v = add mul v 10 ulong sub c 48
+end
+ret v
+end
+
+note sm_home: --home, else AIEN_COORD_HOME, else HOME/.local/state/aien-coord, else usage 64
+fn sm_home to void
+h = sm_aval tfhome
+if gt h 0
+o = sm_apool h
+put gst SHOMO o
+put gst SHOML get gst SSLEN
+ret
+end
+o = sm_env thomev
+if ne o SNONE
+if gt get gst SSLEN 0
+put gst SHOMO o
+put gst SHOML get gst SSLEN
+ret
+end
+end
+o = sm_env thomee
+if ne o SNONE
+if gt get gst SSLEN 0
+n = get gst SSLEN
+x = sm_pt thomesf
+put gst SHOMO o
+put gst SHOML add n len thomesf
+ret
+end
+end
+sm_err tnohome
+sm_die 64
+end
+
+note sm_xopts: --xerj a.b.c.d:port, --index NAME, --no-xerj
+fn sm_xopts to void
+i = sm_aval tfindex
+if gt i 0
+o = sm_apool i
+put gst SIDXO o
+put gst SIDXL get gst SSLEN
+end
+if gt sm_aflag tfnox 0
+put gst SXST 2
+put gst SNOX 1
+end
+x = sm_aval tfxerj
+if eq x 0
+ret
+end
+o = sm_ao x
+n = sm_al x
+ip = ulong 0
+pv = ulong 0
+dots = ulong 0
+for j ulong n
+c = get gab add o j
+if sm_isdig c
+pv = add mul pv 10 ulong sub c 48
+if gt pv 65535
+pv = 65536
+end
+else
+if and eq c 46 lt dots 3
+if gt pv 255
+sm_xbad
+end
+ip = or shl ip 8 pv
+pv = 0
+dots = add dots 1
+else
+if and eq c 58 eq dots 3
+if gt pv 255
+sm_xbad
+end
+ip = or shl ip 8 pv
+pv = 0
+dots = 4
+else
+sm_xbad
+end
+end
+end
+end
+if or ne dots 4 or eq pv 0 gt pv 65535
+sm_xbad
+end
+put gst SXIP ip
+put gst SXPORT pv
+end
+
+fn sm_xbad to void
+sm_err tbadnum
+sm_err tfxerj
+sm_errnl
+sm_die 64
+end
+
+fn sm_loadmap to void
+sm_phome tmapf
+x = sm_rdfile
+if eq x -2
+sm_err tnomap
+sm_die 4
+end
+if lt x 0
+sm_lderr x
+end
+y = sm_jload 3 0
+if lt y 0
+sm_lderr y
+end
+sm_link
+end
+
+note sm_loadtop: --topics FILE (must exist) or topics.tsv beside the binary (optional)
+fn sm_loadtop to void
+t = sm_aval tftopics
+if gt t 0
+sm_pclr
+sm_parg t
+else
+sm_pbin ttopicf
+end
+x = sm_rdfile
+if lt x 0
+if and eq t 0 eq x -2
+ret
+end
+sm_lderr x
+end
+y = sm_tsv 2
+if lt y 0
+sm_lderr y
+end
+end
+
+note sm_loadskl: --skills FILE (must exist) or HOME/skills.jsonl (optional)
+fn sm_loadskl to void
+t = sm_aval tfskills
+if gt t 0
+sm_pclr
+sm_parg t
+else
+sm_phome tskillf
+end
+x = sm_rdfile
+if lt x 0
+if and eq t 0 eq x -2
+ret
+end
+sm_lderr x
+end
+y = sm_jload 4 0
+if lt y 0
+sm_lderr y
+end
+end
+
+note ---- import ----
+fn sm_wrec r ulong to void
+sm_ob 123
+sm_ok tkrepo
+sm_fq r FREPO
+sm_okc tkpar
+if ne sm_kg r KPNUL 0
+sm_onull
+else
+sm_fq r FPAR
+end
+sm_okc tkpst
+sm_fq r FPST
+sm_okc tkpurp
+sm_fq r FPUR
+sm_okc tklay
+sm_fq r FLAY
+sm_okc tkarch
+sm_obool ne sm_kg r KARCH 0
+sm_okc tkfork
+sm_obool ne sm_kg r KFORK 0
+sm_okc tkdefb
+sm_fq r FDEF
+sm_okc tkpush
+sm_fq r FPUSH
+sm_okc tkbrf
+if or ne sm_kg r KBNUL 0 eq sm_fl r FBRF 0
+sm_onull
+else
+sm_fq r FBRF
+end
+sm_okc tksrc
+sm_fq r FSRC
+sm_okc tkrule
+sm_fq r FRULE
+sm_ob 125
+sm_ob 10
+end
+
+text tkok "ok"
+text tkrecs "records"
+text tkconf "confirmed"
+text tkinf "inferred"
+text tkroot "root"
+text tknone "none"
+text tkindex "index"
+text tkrepos2 "repos"
+text tkskills "skills"
+text tnorules "synapse-map: no infer.tsv beside the binary; every parent without a crumb is NONE\n"
+
+fn sm_crumbs d ulong to void
+for r ulong get gst SNREC
+sm_pclr
+sm_parg d
+sm_pc 47
+sm_ppool sm_fo r FNAME sm_fl r FNAME
+sm_ptx tcrumbx
+x = sm_rdfile
+if ge x 0
+y = sm_jload 5 r
+if lt y 0
+sm_lderr y
+end
+else
+if ne x -2
+sm_lderr x
+end
+end
+end
+end
+
+fn sm_cimport to int
+np = sm_argscan tvfimp tswnone
+if ne np 0
+sm_usage
+end
+c = sm_aval tfcat
+if eq c 0
+sm_usage
+end
+sm_home
+sm_pclr
+sm_parg c
+x = sm_rdfile
+if lt x 0
+sm_lderr x
+end
+y = sm_jload 1 0
+if lt y 0
+sm_lderr y
+end
+nc = get gst SNREC
+e = sm_aval tfextra
+if gt e 0
+sm_pclr
+sm_parg e
+x = sm_rdfile
+if lt x 0
+sm_lderr x
+end
+y = sm_jload 2 0
+if lt y 0
+sm_lderr y
+end
+end
+ne2 = sub get gst SNREC nc
+i = sm_aval tfinfer
+if gt i 0
+sm_pclr
+sm_parg i
+else
+sm_pbin tinferf
+end
+x = sm_rdfile
+if ge x 0
+y = sm_tsv 1
+if lt y 0
+sm_lderr y
+end
+else
+if or gt i 0 ne x -2
+sm_lderr x
+end
+sm_err tnorules
+end
+d = sm_aval tfcrumbs
+if gt d 0
+sm_crumbs d
+end
+for r ulong get gst SNREC
+sm_resolve r
+end
+sm_refs
+for r ulong get gst SNREC
+sm_wrec r
+end
+sm_pclr
+sm_ppool get gst SHOMO get gst SHOML
+sm_mkdirp
+sm_phome tmapf
+if ne get gst SOVF 0
+sm_die 70
+end
+w = sm_wratom
+if lt w 0
+sm_lderr w
+end
+sm_isum nc ne2
+ret 0
+end
+
+fn sm_cnt t view uchar * to ulong
+n = ulong 0
+for r ulong get gst SNREC
+if sm_feqt r FPST t
+n = add n 1
+end
+end
+ret n
+end
+
+fn sm_isum nc ulong ne2 ulong to void
+sm_ob 123
+sm_ok tkok
+sm_obool true
+sm_okc tkrecs
+sm_on get gst SNREC
+sm_okc tcatalog
+sm_on nc
+sm_okc textra
+sm_on ne2
+sm_okc tkconf
+sm_on sm_cnt tsconf
+sm_okc tkinf
+sm_on sm_cnt tsinf
+sm_okc tkroot
+sm_on sm_cnt tsroot
+sm_okc tknone
+sm_on sm_cnt tsnone
+sm_ob 125
+sm_ob 10
+end
+
+note ---- index ----
+text txdown "synapse-map: xerj unreachable or refused the request\n"
+
+fn sm_cindex to int
+np = sm_argscan tvfidx tswnone
+if ne np 0
+sm_usage
+end
+sm_home
+sm_xopts
+sm_loadmap
+sm_loadtop
+sm_loadskl
+x = sm_xindex
+if lt x 0
+sm_err txdown
+if eq get gst SXST 2
+sm_die 75
+end
+sm_die 70
+end
+sm_ob 123
+sm_ok tkok
+sm_obool true
+sm_okc tkindex
+sm_oq get gst SIDXO get gst SIDXL
+sm_okc tkrepos2
+sm_on get gst SNREC
+sm_okc tkskills
+sm_on get gst SNSKL
+sm_ob 125
+sm_ob 10
+ret 0
+end
+
+note ---- tree ----
+text tkdepth "depth"
+text tsparmis " (parent missing: "
+text tsarchd " (archived)"
+text tsforkd " (fork)"
+
+fn sm_tnode r ulong d ulong tx bool to void
+if ne sm_kg r KVIS 0
+ret
+end
+sm_ks r KVIS 1
+if tx
+for i ulong mul d 2
+sm_ob 32
+end
+sm_op sm_fo r FREPO sm_fl r FREPO
+sm_ob 32
+sm_ob 91
+sm_op sm_fo r FPST sm_fl r FPST
+sm_ob 93
+if ne sm_kg r KARCH 0
+sm_ot tsarchd
+end
+if ne sm_kg r KFORK 0
+sm_ot tsforkd
+end
+if and eq sm_kg r KPNUL 0 eq sm_kg r KPIDX 0
+sm_ot tsparmis
+sm_op sm_fo r FPAR sm_fl r FPAR
+sm_ob 41
+end
+sm_ob 10
+else
+sm_ob 123
+sm_ok tkrepo
+sm_fq r FREPO
+sm_okc tkdepth
+sm_on d
+sm_okc tkpar
+if ne sm_kg r KPNUL 0
+sm_onull
+else
+sm_fq r FPAR
+end
+sm_okc tkpst
+sm_fq r FPST
+sm_ob 125
+sm_ob 10
+end
+for c ulong get gst SNREC
+if eq sm_kg c KPIDX add r 1
+sm_tnode c add d 1 tx
+end
+end
+end
+
+fn sm_ctree to int
+np = sm_argscan tvfhome tswtext
+if ne np 0
+sm_usage
+end
+sm_home
+sm_loadmap
+tx = gt sm_aflag tftext 0
+for r ulong get gst SNREC
+sm_ks r KVIS 0
+end
+for r ulong get gst SNREC
+if sm_feqt r FPST tsroot
+sm_tnode r 0 tx
+end
+end
+for r ulong get gst SNREC
+if and eq sm_kg r KPNUL 0 eq sm_kg r KPIDX 0
+sm_tnode r 0 tx
+end
+end
+for r ulong get gst SNREC
+if sm_feqt r FPST tsnone
+sm_tnode r 0 tx
+end
+end
+for r ulong get gst SNREC
+sm_tnode r 0 tx
+end
+ret 0
+end

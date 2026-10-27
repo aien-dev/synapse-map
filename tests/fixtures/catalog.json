@@ -1,0 +1,13 @@
+{"generated_at":"2026-10-27T00:00:00Z","org":"t-org","repos":[
+{"name":"lang","description":"Omega language and compiler with TLS 1.3 client","url":"https://github.com/t-org/lang","default_branch":"main","fork":false,"pushed_at":"2026-10-27T00:00:00Z","archived":false,"brief":"AGENTS.md"},
+{"name":"lang-fmt","description":"Formatter for lang source files","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""},
+{"name":"vc","description":"Source control for AI agents with changesets","url":"","default_branch":"trunk","fork":false,"pushed_at":null,"archived":false,"brief":"README.md"},
+{"name":"lonely","description":"Weather station logger","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""},
+{"name":"oldbase","description":"Old memory engine","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":true,"brief":""},
+{"name":"memkid","description":"Memory server rewrite","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""},
+{"name":"upfork","description":"Fork of an upstream bootloader","url":"","default_branch":"main","fork":true,"pushed_at":null,"archived":false,"brief":""},
+{"name":"bootcfg","description":"Boot configuration files","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""},
+{"name":"ghostkid","description":"Points at a parent the map does not have","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""},
+{"name":"dup-a","description":"Duplicate outreach draft detector for recipient email lanes","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""},
+{"name":"dup-b","description":"Detector for duplicate outreach email drafts per recipient lane","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""}
+]}

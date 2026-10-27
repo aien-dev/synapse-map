@@ -1,0 +1,274 @@
+note ======== tokens, sets, similarity ========
+note Tokens: maximal runs of ASCII letters and digits, lowercased; fewer than 2 bytes, all digits and
+note stopwords are dropped; plural "ies" becomes "y" and a final "s" (not "ss", "us", "is") is cut.
+note Sets (ids): record doc set r (cap 96: name, purpose, layer, topics), record purpose set 1024 + r
+note (cap 48), query set 2048 (cap 96), scratch set 2049 (cap 96). Doc entries carry a boost in bits 32+.
+
+global gth ulong 16384
+global gtko ulong 8192
+global gtkl ulong 8192
+global gtdf ulong 8192
+global gtb uchar 256
+global gset ulong 147648
+global gsetn ulong 2050
+
+const STBN ulong 25
+const SQSET ulong 2048
+const SXSET ulong 2049
+
+text tstop "an and are as at be by for from in into is it its of on or that the this to with without not no our we us my your you can each every per via so than then them they their these those has have had was were will would should could also only but do does done all any one how what which who why when where use used using new"
+
+fn sm_sbase id ulong to ulong
+if lt id 1024
+ret mul id 96
+end
+if lt id 2048
+ret add 98304 mul sub id 1024 48
+end
+ret add 147456 mul sub id 2048 96
+end
+
+fn sm_scap id ulong to ulong
+if and ge id 1024 lt id 2048
+ret 48
+end
+ret 96
+end
+
+fn sm_sn id ulong to ulong
+ret get gsetn id
+end
+
+fn sm_sget id ulong i ulong to ulong
+ret get gset add sm_sbase id i
+end
+
+fn sm_sclr id ulong to void
+put gsetn id 0
+end
+
+note sm_sadd: add token v with boost bo to set id (the larger boost is kept on a repeat)
+fn sm_sadd id ulong v ulong bo ulong to void
+b = sm_sbase id
+n = get gsetn id
+for i ulong n
+x = get gset add b i
+if eq and x 4294967295 v
+if lt shr x 32 bo
+put gset add b i or v shl bo 32
+end
+ret
+end
+end
+if ge n sm_scap id
+ret
+end
+put gset add b n or v shl bo 32
+put gsetn id add n 1
+end
+
+fn sm_shas id ulong v ulong to ulong
+b = sm_sbase id
+for i ulong get gsetn id
+x = get gset add b i
+if eq and x 4294967295 v
+ret add shr x 32 1
+end
+end
+ret 0
+end
+
+fn sm_isstop k ulong to bool
+s = ulong 0
+for j ulong add len tstop 1
+e = eq j len tstop
+if not e
+e = eq get tstop j 32
+end
+if e
+if eq sub j s k
+m = true
+for q ulong k
+if ne get gtb q get tstop add s q
+m = false
+end
+end
+if m
+ret true
+end
+end
+s = add j 1
+end
+end
+ret false
+end
+
+note sm_intern: id of gtb[0, k), adding it to the table when new; SNONE when the table is full
+fn sm_intern k ulong to ulong
+h = ulong 2166136261
+for i ulong k
+h = and mul xor h ulong get gtb i 16777619 4294967295
+end
+for j ulong 16384
+s = and add h j 16383
+v = get gth s
+if eq v 0
+id = get gst SNTOK
+if ge id 8192
+ret SNONE
+end
+o = get gst SPOOL
+for i ulong k
+sm_pb get gtb i
+end
+put gtko id o
+put gtkl id k
+put gtdf id 0
+put gth s add id 1
+put gst SNTOK add id 1
+ret id
+end
+t = sub v 1
+if eq get gtkl t k
+m = true
+for i ulong k
+if ne get gpool add get gtko t i get gtb i
+m = false
+end
+end
+if m
+ret t
+end
+end
+end
+ret SNONE
+end
+
+fn sm_tokend id ulong bo ulong to void
+k = get gst STBN
+put gst STBN 0
+if lt k 2
+ret
+end
+dg = true
+for i ulong k
+if not sm_isdig get gtb i
+dg = false
+end
+end
+if dg
+ret
+end
+if sm_isstop k
+ret
+end
+if gt k 4
+if and eq get gtb sub k 3 105 and eq get gtb sub k 2 101 eq get gtb sub k 1 115
+put gtb sub k 3 121
+k = sub k 2
+end
+end
+if gt k 3
+if eq get gtb sub k 1 115
+c = get gtb sub k 2
+if not or eq c 115 or eq c 117 eq c 105
+k = sub k 1
+end
+end
+end
+t = sm_intern k
+if ne t SNONE
+sm_sadd id t bo
+end
+end
+
+fn sm_isword c uchar to bool
+if sm_isdig c
+ret true
+end
+ret and ge c 97 le c 122
+end
+
+note sm_tokz: tokens of pool slice (o, n) into set id with boost bo
+fn sm_tokz o ulong n ulong id ulong bo ulong to void
+put gst STBN 0
+for i ulong n
+c = sm_lc get gpool add o i
+if sm_isword c
+k = get gst STBN
+if lt k len gtb
+put gtb k c
+put gst STBN add k 1
+end
+else
+sm_tokend id bo
+end
+end
+sm_tokend id bo
+end
+
+note sm_tokrec: doc and purpose sets of every record, then document frequencies over doc sets
+fn sm_tokrec to void
+for r ulong get gst SNREC
+sm_sclr r
+sm_sclr add 1024 r
+sm_tokz sm_fo r FPUR sm_fl r FPUR add 1024 r 0
+sm_tokz sm_fo r FNAME sm_fl r FNAME r 1
+sm_tokz sm_fo r FTOP sm_fl r FTOP r 1
+sm_tokz sm_fo r FPUR sm_fl r FPUR r 0
+sm_tokz sm_fo r FLAY sm_fl r FLAY r 0
+end
+for r ulong get gst SNREC
+for i ulong sm_sn r
+t = and sm_sget r i 4294967295
+put gtdf t add get gtdf t 1
+end
+end
+end
+
+note sm_jac: Jaccard index of two sets in thousandths (token ids only; 0 when both are empty)
+fn sm_jac a ulong b ulong to ulong
+na = sm_sn a
+nb = sm_sn b
+if eq add na nb 0
+ret 0
+end
+c = ulong 0
+for i ulong na
+if gt sm_shas b and sm_sget a i 4294967295 0
+c = add c 1
+end
+end
+ret div mul c 1000 sub add na nb c
+end
+
+note sm_lg2m: 1000 * log2(x / 1000) for x >= 1000 (0 below), by bit length then 10 squarings
+fn sm_lg2m x ulong to ulong
+if le x 1000
+ret 0
+end
+ip = ulong 0
+y = x
+while ge y 2000 bound 70
+y = div y 2
+ip = add ip 1
+end
+f = ulong 0
+b = ulong 500
+for i ulong 10
+y = div mul y y 1000
+if ge y 2000
+y = div y 2
+f = add f b
+end
+b = div b 2
+end
+ret add mul ip 1000 f
+end
+
+note sm_idf: 1000 + 1000 * log2((N + 1) / (df + 1)) over record doc sets
+fn sm_idf t ulong to ulong
+n = get gst SNREC
+d = get gtdf t
+ret add 1000 sm_lg2m div mul add n 1 1000 add d 1
+end

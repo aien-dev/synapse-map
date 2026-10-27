@@ -1,0 +1,39 @@
+# synapse-map parent inference rules. First matching rule wins; a repo whose .crumb carries
+# extensions.map.parent is CONFIRMED and never consults these rules.
+# Columns: pattern<TAB>parent<TAB>why<TAB>layer (layer optional).
+# pattern: repo name glob ('*' any run), or desc:<substring> (case-insensitive, on the description).
+# parent: repo name (org is prefixed), ROOT (declared root) or NONE (no parent known: orphan).
+# Every non-ROOT, non-NONE row yields parent_status INFERRED, reported by `synapse-map check`.
+aien-architecture-mv	ROOT	canonical architecture for the AIEN ecosystem (catalog description)	plan
+omega-mv	ROOT	language, compiler and gates; Omega tools pin it by sha	language
+aienix	ROOT	front door: pinned repositories and verification paths (catalog description)	front-door
+rpi5-uefi	ROOT	preservation fork heading the Raspberry Pi 5 firmware chain (catalog description)	firmware
+synapse	aien-architecture-mv	coordination substrate placed under the architecture plan	coordination
+synapse-*	synapse	coordination tools are children of synapse (COORD-CONTRACT)	coordination
+omega-*	omega-mv	Omega libraries and tools pin omega-mv	language
+tree-sitter-omega	omega-mv	grammar for .om sources	language
+homebrew-omega	omega-mv	packages omc built from the seed	language
+babel	omega-mv	translates code through Omega (catalog description)	language
+omtex	omega-mv	an Omega library (catalog description)	language
+omnet	omega-mv	network code rewritten in Omega (catalog description)	language
+cortex	omega-mv	Cortex memory server in seeded Omega (catalog description)	memory
+CUDApp	omega-mv	GPU machine-code toolchain of the Omega stack	toolchain
+.github	aienix	organisation profile; front-door content	site
+aien-protocols-mv	aien-architecture-mv	canonical specifications under the architecture plan	protocol
+interplane-mv	aien-protocols-mv	interoperability protocol (catalog description)	protocol
+interplane.io	interplane-mv	renders the page from the protocol repository (catalog description)	site
+sovereign-intelligence	aien-architecture-mv	product bundle (Aien, Omega, AienOS) under the architecture plan	product
+AienOS-nv	sovereign-intelligence	"Part of Sovereign Intelligence" (catalog description)	product
+aienux	AienOS-nv	the AienOS kernel (catalog description)	kernel
+atlas	aienux	boot seed of the AienOS boot chain (catalog description)	kernel
+aien-sovereign-core-mv	AienOS-nv	AienOS host runtime (catalog description)	runtime
+aienos.com	AienOS-nv	source of www.aienos.com, the AienOS site	site
+omega-projects	aienos.com	projects shown at aienos.com/aien/ (catalog description)	site
+aien-edge	aienos.com	edge server for AIEN static sites (catalog description)	site
+aien-translate	translate	translation server for translate.js (catalog description)	runtime
+edk2*	rpi5-uefi	fork for the Raspberry Pi 5 firmware chain (catalog description)	firmware
+arm-trusted-firmware	rpi5-uefi	fork for the Raspberry Pi 5 firmware chain (catalog description)	firmware
+crumb-spec-mv	aien-protocols-mv	Crumb protocol specification	protocol
+spark-crumbs-mv	crumb-spec-mv	implementation of the Crumb protocol (catalog description)	protocol
+aien-local-stack	aien-protocols-mv	composition via AIEN protocols (catalog description)	runtime
+rad-id-sync	synapse	Radicle synchronisation, superseded by Synapse Radicle interop	coordination

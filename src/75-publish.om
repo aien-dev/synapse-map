@@ -1,0 +1,443 @@
+note ======== new --publish: create the child on GitHub and open the parent's draft PR ========
+note Every step is one argv run as /usr/bin/env HOME=$HOME PATH=$HOME/.local/bin:/usr/bin:/bin ARGV...
+note (execprog: empty environment, no PATH search), with the child's stdout sent to stderr so stdout
+note stays JSONL. --dry-run prints {"argv":[...]} (and {"edit":..,"line":..} for the README step)
+note instead of running anything. The first failing step stops the run: {"ok":false,...}, exit 70.
+
+global garv ulong 128
+
+const SPKN ulong 40
+const SPRO ulong 41
+const SPRL ulong 42
+const SCLO ulong 43
+const SCLL ulong 44
+const SBRO ulong 45
+const SBRL ulong 46
+const SCHO ulong 47
+const SCHL ulong 48
+const SLNO ulong 49
+const SLNL ulong 50
+const SDRY ulong 51
+const SFNO ulong 52
+const SFNL ulong 53
+
+text tfpub "--publish"
+text tfdry "--dry-run"
+text tswnew "--publish --dry-run"
+text tpathsfx "/.local/bin:/usr/bin:/bin"
+text tpathk "PATH="
+text tgit "git"
+text tgh "gh"
+text tdashc "-C"
+text tdashcc "-c"
+text tuname "user.name=Drake Stapleton"
+text tumail "user.email=aien@aienos.com"
+text tinit "init"
+text tdashb "-b"
+text tmain "main"
+text tadd "add"
+text tdasha "-A"
+text tcommit "commit"
+text tdashs "-s"
+text tdashm "-m"
+text tmsg1 "Scaffold "
+text tmsg1b " (synapse-map new)"
+text tmsg2 "docs: connect "
+text trepo "repo"
+text tcreate "create"
+text tpublic "--public"
+text tdescr "--description"
+text tsource "--source"
+text tpush "--push"
+text tclone "clone"
+text tghurl "https://github.com/"
+text tparsfx ".parent"
+text tcheckout "checkout"
+text tconn "connected/"
+text treadme "README.md"
+text torigin "origin"
+text tdashu "-u"
+text tpr "pr"
+text tdraft "--draft"
+text tdashr "-R"
+text thead "--head"
+text ttitle "--title"
+text tconnt "Connect "
+text tbodyf "--body-file"
+text tsppr "/PARENT-PR.md"
+text tkargv "argv"
+text tkedit "edit"
+text tkline "line"
+text tkstep "step"
+text tkstat "status"
+text tkpub "published"
+text tkbr "branch"
+text tconnh "## Connected repos"
+text tconnhb "\n## Connected repos\n\n"
+text tsreadme "/README.md"
+text tpubdry "synapse-map: --dry-run needs --publish\n"
+text tnone ""
+
+note sm_cat: pool slice for text a + slice (o, n) + text b; length in SSLEN
+fn sm_cat a view uchar * o ulong n ulong b view uchar * to ulong
+s = get gst SPOOL
+z = sm_pt a
+z = sm_pcp o n
+z = sm_pt b
+put gst SSLEN sub get gst SPOOL s
+ret s
+end
+
+note sm_pkenv: start a packed argv with the env wrapper; returns the next offset
+fn sm_pkenv to ulong
+put gpk 0 0
+put gpk 1 0
+put gst SPKN 0
+p = sm_pktx 2 tenv
+h = sm_env thomee
+if eq h SNONE
+p = sm_pktx p tdefhome
+p = sm_pktx p tdefpath
+ret p
+end
+hn = get gst SSLEN
+p = sm_pkadd p sub h 5 add hn 5
+q = sm_cat tpathk h hn tpathsfx
+p = sm_pkadd p q get gst SSLEN
+ret p
+end
+
+fn sm_pkg p ulong k ulong to ulong
+ret sm_pkadd p get gst k get gst add k 1
+end
+
+note sm_pkrun: run gpk (records up to offset p), stdout to stderr; exit status, 256 + signal, or 512
+fn sm_pkrun p ulong to ulong
+st = new uchar 4 0
+if ne get gst SOVF 0
+ret 512
+end
+r = sm_flush 1
+pid = fork
+if lt pid 0
+ret 512
+end
+if eq pid 0
+d = dupfd 2 1 0
+x = execprog gpk 0 p
+exit 127
+end
+w = waitpid int pid st 0 4 0
+if lt w 0
+ret 512
+end
+s = ulong get st 0
+if ne s 0
+ret add 256 and s 127
+end
+ret ulong get st 1
+end
+
+fn sm_oargv to void
+sm_ob 91
+n = get gst SPKN
+for i ulong n
+if ge i 3
+if gt i 3
+sm_ob 44
+end
+sm_oq get garv mul i 2 get garv add mul i 2 1
+end
+end
+sm_ob 93
+end
+
+note sm_step: run (or print) the packed argv; a failure prints the error record and exits 70
+fn sm_step k ulong p ulong to void
+if ne get gst SDRY 0
+sm_ob 123
+sm_ok tkargv
+sm_oargv
+sm_ob 125
+sm_ob 10
+ret
+end
+c = sm_pkrun p
+if ne c 0
+sm_ob 123
+sm_ok tkok
+sm_obool false
+sm_okc tkstep
+sm_on k
+sm_okc tkargv
+sm_oargv
+sm_okc tkstat
+sm_on c
+sm_ob 125
+sm_ob 10
+sm_die 70
+end
+end
+
+note git -C <slice k> ... prefix
+fn sm_pkgit k ulong to ulong
+p = sm_pkenv
+p = sm_pktx p tgit
+p = sm_pktx p tdashc
+ret sm_pkg p k
+end
+
+fn sm_pkid p ulong to ulong
+p = sm_pktx p tdashcc
+p = sm_pktx p tuname
+p = sm_pktx p tdashcc
+ret sm_pktx p tumail
+end
+
+note sm_pubset: slices used by the steps (child dir, owner/repo of parent, clone dir, branch, line)
+fn sm_pubset to void
+d = sm_apool get gst SNDI
+dn = get gst SSLEN
+put gst SCHO d
+put gst SCHL dn
+po = get gst SNPO
+q = sm_pfind po get gst SNPL 64
+put gst SPRO po
+put gst SPRL q
+c = sm_cat tnone d dn tparsfx
+put gst SCLO c
+put gst SCLL get gst SSLEN
+b = sm_cat tconn get gst SNNO get gst SNNL tnone
+put gst SBRO b
+put gst SBRL get gst SSLEN
+w = sm_pfind po q 47
+f = get gst SPOOL
+z = sm_pcp po w
+sm_pb 47
+z = sm_pcp get gst SNNO get gst SNNL
+put gst SFNO f
+put gst SFNL sub get gst SPOOL f
+s = get gst SPOOL
+sm_pb 45
+sm_pb 32
+sm_pb 91
+z = sm_pcp get gst SNNO get gst SNNL
+z = sm_pt tr2
+z = sm_pcp f get gst SFNL
+z = sm_pt tp3
+z = sm_pcp get gst SNUO get gst SNUL
+put gst SLNO s
+put gst SLNL sub get gst SPOOL s
+end
+
+note sm_ishead: line at offset i of gfile starts with t
+fn sm_ishead i ulong n ulong t view uchar * to bool
+if gt add i len t n
+ret false
+end
+for j ulong len t
+if ne get gfile add i j get t j
+ret false
+end
+end
+ret true
+end
+
+note sm_rdedit: add the README line under "## Connected repos" in the clone (section created if absent)
+fn sm_rdedit to void
+sm_pclr
+sm_ppool get gst SCLO get gst SCLL
+sm_pc 47
+sm_ptx treadme
+x = sm_rdfile
+if lt x 0
+sm_ob 123
+sm_ok tkok
+sm_obool false
+sm_okc tkedit
+q = sm_ppath
+sm_oq q get gst SSLEN
+sm_okc tkstat
+sm_on ulong sub 0 x
+sm_ob 125
+sm_ob 10
+sm_die 70
+end
+r = sm_flush 1
+n = get gst SFLEN
+h = SNONE
+i = ulong 0
+while lt i n bound 2097152
+if and eq h SNONE sm_ishead i n tconnh
+h = i
+else
+if and ne h SNONE and gt i h eq get gfile i 35
+break
+end
+end
+e = sm_pfind2 i n
+i = add e 1
+end
+if eq h SNONE
+for j ulong n
+sm_ob get gfile j
+end
+lastc = uchar 10
+if gt n 0
+lastc = get gfile sub n 1
+end
+if ne lastc 10
+sm_ob 10
+end
+sm_ot tconnhb
+sm_op get gst SLNO get gst SLNL
+sm_ob 10
+else
+jj = i
+if gt jj n
+jj = n
+end
+while and gt jj add h len tconnh eq get gfile sub jj 1 10 bound 2097152
+jj = sub jj 1
+end
+for k ulong jj
+sm_ob get gfile k
+end
+sm_ob 10
+sm_op get gst SLNO get gst SLNL
+for kk ulong sub n jj
+sm_ob get gfile add jj kk
+end
+end
+w = sm_wratom
+if lt w 0
+sm_err tnwrite
+wr = write 2 gpath 0 get gst SPLEN
+sm_errnl
+sm_die 70
+end
+end
+
+note sm_pfind2: offset of the next '\n' in gfile from i (n when none)
+fn sm_pfind2 i ulong n ulong to ulong
+j = i
+while lt j n bound 2097152
+if eq get gfile j 10
+ret j
+end
+j = add j 1
+end
+ret n
+end
+
+fn sm_ppath to ulong
+s = get gst SPOOL
+for i ulong get gst SPLEN
+sm_pb get gpath i
+end
+put gst SSLEN sub get gst SPOOL s
+ret s
+end
+
+fn sm_publish to void
+sm_pubset
+p = sm_pkgit SCHO
+p = sm_pktx p tinit
+p = sm_pktx p tdashb
+p = sm_pktx p tmain
+sm_step 1 p
+p = sm_pkgit SCHO
+p = sm_pktx p tadd
+p = sm_pktx p tdasha
+sm_step 2 p
+p = sm_pkgit SCHO
+p = sm_pkid p
+p = sm_pktx p tcommit
+p = sm_pktx p tdashs
+p = sm_pktx p tdashm
+m = sm_cat tmsg1 get gst SNNO get gst SNNL tmsg1b
+p = sm_pkadd p m get gst SSLEN
+sm_step 3 p
+p = sm_pkenv
+p = sm_pktx p tgh
+p = sm_pktx p trepo
+p = sm_pktx p tcreate
+p = sm_pkg p SFNO
+p = sm_pktx p tpublic
+p = sm_pktx p tdescr
+p = sm_pkg p SNUO
+p = sm_pktx p tsource
+p = sm_pkg p SCHO
+p = sm_pktx p tpush
+sm_step 4 p
+p = sm_pkenv
+p = sm_pktx p tgit
+p = sm_pktx p tclone
+u = sm_cat tghurl get gst SPRO get gst SPRL tnone
+p = sm_pkadd p u get gst SSLEN
+p = sm_pkg p SCLO
+sm_step 5 p
+p = sm_pkgit SCLO
+p = sm_pktx p tcheckout
+p = sm_pktx p tdashb
+p = sm_pkg p SBRO
+sm_step 6 p
+if ne get gst SDRY 0
+sm_ob 123
+sm_ok tkedit
+e = sm_cat tnone get gst SCLO get gst SCLL tsreadme
+el = get gst SSLEN
+sm_oq e el
+sm_okc tkline
+sm_oq get gst SLNO get gst SLNL
+sm_ob 125
+sm_ob 10
+else
+sm_rdedit
+end
+p = sm_pkgit SCLO
+p = sm_pktx p tadd
+p = sm_pktx p treadme
+sm_step 8 p
+p = sm_pkgit SCLO
+p = sm_pkid p
+p = sm_pktx p tcommit
+p = sm_pktx p tdashs
+p = sm_pktx p tdashm
+m = sm_cat tmsg2 get gst SNNO get gst SNNL tnone
+p = sm_pkadd p m get gst SSLEN
+sm_step 9 p
+p = sm_pkgit SCLO
+p = sm_pktx p tpush
+p = sm_pktx p tdashu
+p = sm_pktx p torigin
+p = sm_pkg p SBRO
+sm_step 10 p
+p = sm_pkenv
+p = sm_pktx p tgh
+p = sm_pktx p tpr
+p = sm_pktx p tcreate
+p = sm_pktx p tdraft
+p = sm_pktx p tdashr
+p = sm_pkadd p get gst SPRO get gst SPRL
+p = sm_pktx p thead
+p = sm_pkg p SBRO
+p = sm_pktx p ttitle
+t = sm_cat tconnt get gst SNNO get gst SNNL tnone
+p = sm_pkadd p t get gst SSLEN
+p = sm_pktx p tbodyf
+b = sm_cat tnone get gst SCHO get gst SCHL tsppr
+p = sm_pkadd p b get gst SSLEN
+sm_step 11 p
+if eq get gst SDRY 0
+sm_ob 123
+sm_ok tkpub
+sm_obool true
+sm_okc tkrepo
+sm_oq get gst SFNO get gst SFNL
+sm_okc tkbr
+sm_oq get gst SBRO get gst SBRL
+sm_ob 125
+sm_ob 10
+end
+end

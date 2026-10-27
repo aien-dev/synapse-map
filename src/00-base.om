@@ -1,0 +1,744 @@
+note synapse-map: repo graph, routing, scaffolding and checks for the agents working on aien-dev.
+note Composed after seed/json/json.om, seed/json/jsonw.om and seed/net/http.om under one om2 line by
+note build.sh. Signatures use unsized arrays (`*`): at this omc pin a const defined after any fn breaks
+note later signatures that name a const as an array length, and every library fn precedes these files.
+note Name prefixes: functions sm_*, globals g*, texts t*. Library names (js_*, h*) are not reused.
+
+note ======== state ========
+note gst slots (ulong): see the const block below.
+global gst ulong 64
+note gpool: every string the program keeps (records, rules, skills, tokens, paths)
+global gpool uchar 8388608
+note gout: stdout and file output; also request bodies (written after the pending output, then cut)
+global gout uchar 4194304
+note gfile: the last file or HTTP response body read
+global gfile uchar 2097152
+note records: 16 string fields (offset, length) and 16 ulong flags per record, at most 1000 records
+global gro ulong 16384
+global grl ulong 16384
+global grf ulong 16384
+note arguments: bytes and (offset, length) pairs, at most 64 arguments
+global gab uchar 65536
+global gao ulong 128
+global gpath uchar 4096
+global gpk uchar 4096
+global gnum uchar 32
+
+const SPOOL ulong 0
+const SNREC ulong 1
+const SOUT ulong 2
+const SNRUL ulong 3
+const SNSKL ulong 4
+const SNTOK ulong 5
+const SXIP ulong 6
+const SXPORT ulong 7
+const SORGO ulong 8
+const SORGL ulong 9
+const SARGC ulong 10
+const SHOMO ulong 11
+const SHOML ulong 12
+const SXST ulong 13
+const SOVF ulong 14
+const SFLEN ulong 15
+const SPLEN ulong 16
+const SNXR ulong 17
+const SCTYP ulong 18
+const SSLEN ulong 19
+const SIDXO ulong 20
+const SIDXL ulong 21
+const SBINO ulong 22
+const SBINL ulong 23
+const SBAD ulong 24
+const SNONE ulong 4294967295
+
+note record string fields
+const FREPO ulong 0
+const FPAR ulong 1
+const FPST ulong 2
+const FPUR ulong 3
+const FLAY ulong 4
+const FDEF ulong 5
+const FPUSH ulong 6
+const FBRF ulong 7
+const FSRC ulong 8
+const FRULE ulong 9
+const FNAME ulong 10
+const FTOP ulong 11
+const FURL ulong 12
+const FCPUR ulong 13
+const FCLAY ulong 14
+const FCPAR ulong 15
+note record flags
+const KARCH ulong 0
+const KFORK ulong 1
+const KBNUL ulong 2
+const KPNUL ulong 3
+const KPIDX ulong 4
+const KVIS ulong 5
+const KRUL ulong 6
+const KCONF ulong 7
+const KSEM ulong 8
+const KSEMS ulong 9
+
+note ======== output buffer ========
+fn sm_ob c uchar to void
+n = get gst SOUT
+if ge n len gout
+put gst SOVF 1
+ret
+end
+put gout n c
+put gst SOUT add n 1
+end
+
+fn sm_ot t view uchar * to void
+for i ulong len t
+sm_ob get t i
+end
+end
+
+fn sm_op o ulong n ulong to void
+for i ulong n
+sm_ob get gpool add o i
+end
+end
+
+fn sm_hexd v ulong to uchar
+if lt v 10
+ret uchar add v 48
+end
+ret uchar add v 87
+end
+
+note sm_oesc: one byte of a JSON string body (RFC 8259 section 7); bytes >= 0x20 other than " and \ pass
+fn sm_oesc c uchar to void
+if eq c 34
+sm_ob 92
+sm_ob 34
+ret
+end
+if eq c 92
+sm_ob 92
+sm_ob 92
+ret
+end
+if lt c 32
+sm_ob 92
+if eq c 10
+sm_ob 110
+ret
+end
+if eq c 9
+sm_ob 116
+ret
+end
+if eq c 13
+sm_ob 114
+ret
+end
+sm_ob 117
+sm_ob 48
+sm_ob 48
+sm_ob sm_hexd ulong shr c 4
+sm_ob sm_hexd ulong and c 15
+ret
+end
+sm_ob c
+end
+
+fn sm_oq o ulong n ulong to void
+sm_ob 34
+for i ulong n
+sm_oesc get gpool add o i
+end
+sm_ob 34
+end
+
+fn sm_otq t view uchar * to void
+sm_ob 34
+for i ulong len t
+sm_oesc get t i
+end
+sm_ob 34
+end
+
+fn sm_on v ulong to void
+if eq v 0
+sm_ob 48
+ret
+end
+k = ulong 0
+x = v
+while gt x 0 bound 21
+put gnum k uchar add rem x 10 48
+x = div x 10
+k = add k 1
+end
+for i ulong k
+sm_ob get gnum sub sub k i 1
+end
+end
+
+note sm_omil: v thousandths as a JSON number, e.g. 667 -> 0.667
+fn sm_omil v ulong to void
+sm_on div v 1000
+sm_ob 46
+f = rem v 1000
+sm_ob uchar add div f 100 48
+sm_ob uchar add rem div f 10 10 48
+sm_ob uchar add rem f 10 48
+end
+
+note sm_ok: `"name":` ; sm_okc: `,"name":`
+fn sm_ok t view uchar * to void
+sm_ob 34
+sm_ot t
+sm_ob 34
+sm_ob 58
+end
+
+fn sm_okc t view uchar * to void
+sm_ob 44
+sm_ok t
+end
+
+fn sm_obool b bool to void
+if b
+sm_ob 116
+sm_ob 114
+sm_ob 117
+sm_ob 101
+ret
+end
+sm_ob 102
+sm_ob 97
+sm_ob 108
+sm_ob 115
+sm_ob 101
+end
+
+fn sm_onull to void
+sm_ob 110
+sm_ob 117
+sm_ob 108
+sm_ob 108
+end
+
+note sm_flush: write gout[0, SOUT) to fd; every pass writes at least one byte or returns
+fn sm_flush fd int to long
+n = get gst SOUT
+p = ulong 0
+while lt p n bound 999999
+k = write fd gout p sub n p
+if le k 0
+put gst SOUT 0
+ret -5
+end
+p = add p ulong k
+end
+put gst SOUT 0
+ret 0
+end
+
+fn sm_err t view uchar * to void
+k = write 2 t 0 len t
+end
+
+fn sm_errp o ulong n ulong to void
+if gt n 0
+k = write 2 gpool o n
+end
+end
+
+fn sm_errnl to void
+k = write 2 gnum 0 0
+put gnum 0 10
+k = write 2 gnum 0 1
+end
+
+note sm_die: flush pending stdout, then end the process with code
+fn sm_die code int to void
+if ne get gst SOVF 0
+put gst SOUT 0
+k = write 2 tovf 0 len tovf
+exit 70
+end
+r = sm_flush 1
+exit code
+end
+
+text tovf "synapse-map: internal buffer full\n"
+
+note ======== string pool ========
+fn sm_pb c uchar to void
+o = get gst SPOOL
+if ge o len gpool
+put gst SOVF 2
+ret
+end
+put gpool o c
+put gst SPOOL add o 1
+end
+
+fn sm_pt t view uchar * to ulong
+o = get gst SPOOL
+for i ulong len t
+sm_pb get t i
+end
+ret o
+end
+
+fn sm_pcp o ulong n ulong to ulong
+s = get gst SPOOL
+for i ulong n
+sm_pb get gpool add o i
+end
+ret s
+end
+
+fn sm_pnum v ulong to void
+if eq v 0
+sm_pb 48
+ret
+end
+k = ulong 0
+x = v
+while gt x 0 bound 21
+put gnum k uchar add rem x 10 48
+x = div x 10
+k = add k 1
+end
+for i ulong k
+sm_pb get gnum sub sub k i 1
+end
+end
+
+fn sm_lc c uchar to uchar
+if and ge c 65 le c 90
+ret add c 32
+end
+ret c
+end
+
+fn sm_peq a ulong an ulong b ulong bn ulong to bool
+if ne an bn
+ret false
+end
+for i ulong an
+if ne get gpool add a i get gpool add b i
+ret false
+end
+end
+ret true
+end
+
+note sm_pieq: ASCII case-insensitive equality (GitHub owner/repo names)
+fn sm_pieq a ulong an ulong b ulong bn ulong to bool
+if ne an bn
+ret false
+end
+for i ulong an
+if ne sm_lc get gpool add a i sm_lc get gpool add b i
+ret false
+end
+end
+ret true
+end
+
+fn sm_pteq a ulong an ulong t view uchar * to bool
+if ne an len t
+ret false
+end
+for i ulong an
+if ne get gpool add a i get t i
+ret false
+end
+end
+ret true
+end
+
+note sm_pfind: first index of byte c in pool slice, or n
+fn sm_pfind a ulong n ulong c uchar to ulong
+for i ulong n
+if eq get gpool add a i c
+ret i
+end
+end
+ret n
+end
+
+note ======== records ========
+fn sm_fo r ulong f ulong to ulong
+ret get gro add mul r 16 f
+end
+
+fn sm_fl r ulong f ulong to ulong
+ret get grl add mul r 16 f
+end
+
+fn sm_fset r ulong f ulong o ulong n ulong to void
+put gro add mul r 16 f o
+put grl add mul r 16 f n
+end
+
+fn sm_fsett r ulong f ulong t view uchar * to void
+o = sm_pt t
+sm_fset r f o len t
+end
+
+fn sm_kg r ulong k ulong to ulong
+ret get grf add mul r 16 k
+end
+
+fn sm_ks r ulong k ulong v ulong to void
+put grf add mul r 16 k v
+end
+
+fn sm_fq r ulong f ulong to void
+sm_oq sm_fo r f sm_fl r f
+end
+
+fn sm_feqt r ulong f ulong t view uchar * to bool
+ret sm_pteq sm_fo r f sm_fl r f t
+end
+
+note sm_find: record whose repo equals pool slice (case-insensitive), or SNONE
+fn sm_find o ulong n ulong to ulong
+for r ulong get gst SNREC
+if sm_pieq sm_fo r FREPO sm_fl r FREPO o n
+ret r
+end
+end
+ret SNONE
+end
+
+note sm_parref: length of the owner/repo part of a parent string (bytes before '@')
+fn sm_parref r ulong to ulong
+ret sm_pfind sm_fo r FPAR sm_fl r FPAR 64
+end
+
+note ======== arguments ========
+fn sm_args to long
+n = argcnt
+if gt n 64
+ret -7
+end
+p = ulong 0
+for i ulong ulong n
+k = argread i gab p sub len gab p
+if lt k 0
+ret k
+end
+put gao mul i 2 p
+put gao add mul i 2 1 ulong k
+p = add p ulong k
+end
+put gst SARGC ulong n
+ret 0
+end
+
+fn sm_ao i ulong to ulong
+ret get gao mul i 2
+end
+
+fn sm_al i ulong to ulong
+ret get gao add mul i 2 1
+end
+
+fn sm_aeq i ulong t view uchar * to bool
+if ge i get gst SARGC
+ret false
+end
+o = sm_ao i
+n = sm_al i
+if ne n len t
+ret false
+end
+for j ulong n
+if ne get gab add o j get t j
+ret false
+end
+end
+ret true
+end
+
+note sm_aflag: index of flag t at argument 2 or later, 0 when absent
+fn sm_aflag t view uchar * to ulong
+for i ulong get gst SARGC
+if ge i 2
+if sm_aeq i t
+ret i
+end
+end
+end
+ret 0
+end
+
+note sm_aval: index of the value after flag t, 0 when the flag is absent; a flag without value is usage 64
+fn sm_aval t view uchar * to ulong
+i = sm_aflag t
+if eq i 0
+ret 0
+end
+if ge add i 1 get gst SARGC
+sm_err tnoval
+sm_err t
+sm_errnl
+sm_die 64
+end
+ret add i 1
+end
+
+text tnoval "synapse-map: missing value for "
+
+fn sm_apool i ulong to ulong
+o = get gst SPOOL
+n = sm_al i
+a = sm_ao i
+for j ulong n
+sm_pb get gab add a j
+end
+put gst SSLEN n
+ret o
+end
+
+note sm_inlist: argument i equals one of the space-separated words of w
+fn sm_inlist i ulong w view uchar * to bool
+o = sm_ao i
+n = sm_al i
+s = ulong 0
+for j ulong add len w 1
+e = eq j len w
+if not e
+e = eq get w j 32
+end
+if e
+if eq sub j s n
+m = true
+for q ulong n
+if ne get gab add o q get w add s q
+m = false
+end
+end
+if m
+ret true
+end
+end
+s = add j 1
+end
+end
+ret false
+end
+
+note sm_argscan: every argument after the subcommand is a value flag (vf) with its value, a switch (sw)
+note or a positional; returns the number of positionals (first index in SSLEN), usage 64 on unknown flags
+fn sm_argscan vf view uchar * sw view uchar * to ulong
+np = ulong 0
+put gst SSLEN 0
+i = ulong 2
+while lt i get gst SARGC bound 70
+o = sm_ao i
+isf = false
+if ge sm_al i 2
+if and eq get gab o 45 eq get gab add o 1 45
+isf = true
+end
+end
+if isf
+if sm_inlist i vf
+i = add i 2
+else
+if sm_inlist i sw
+i = add i 1
+else
+sm_err tunk
+k = write 2 gab o sm_al i
+sm_errnl
+sm_die 64
+end
+end
+else
+if eq np 0
+put gst SSLEN i
+end
+np = add np 1
+i = add i 1
+end
+end
+ret np
+end
+
+text tunk "synapse-map: unknown flag "
+
+note ======== paths ========
+fn sm_pclr to void
+put gst SPLEN 0
+end
+
+fn sm_pc c uchar to void
+n = get gst SPLEN
+if ge n len gpath
+put gst SOVF 3
+ret
+end
+put gpath n c
+put gst SPLEN add n 1
+end
+
+fn sm_ptx t view uchar * to void
+for i ulong len t
+sm_pc get t i
+end
+end
+
+fn sm_ppool o ulong n ulong to void
+for i ulong n
+sm_pc get gpool add o i
+end
+end
+
+fn sm_parg i ulong to void
+o = sm_ao i
+for j ulong sm_al i
+sm_pc get gab add o j
+end
+end
+
+note sm_phome: gpath = home "/" t
+fn sm_phome t view uchar * to void
+sm_pclr
+sm_ppool get gst SHOMO get gst SHOML
+sm_pc 47
+sm_ptx t
+end
+
+note sm_pbin: gpath = directory of argv[0] "/" t
+fn sm_pbin t view uchar * to void
+sm_pclr
+sm_ppool get gst SBINO get gst SBINL
+sm_pc 47
+sm_ptx t
+end
+
+note sm_env: value of the environment entry starting with t (e.g. "HOME=") into the pool, or SNONE
+fn sm_env t view uchar * to ulong
+b = new uchar 8192 0
+n = envcnt
+for i ulong ulong n
+k = envread i b 0 8192
+if ge k long len t
+m = true
+for j ulong len t
+if ne get b j get t j
+m = false
+end
+end
+if m
+o = get gst SPOOL
+for j ulong sub ulong k len t
+sm_pb get b add len t j
+end
+put gst SSLEN sub ulong k len t
+ret o
+end
+end
+end
+ret SNONE
+end
+
+note ======== files ========
+note sm_rdfile: gpath into gfile; length, or -errno; -27 when the file is larger than gfile
+fn sm_rdfile to long
+x = new uchar 1 0
+fd = fopen gpath 0 get gst SPLEN 524288 0
+if lt fd 0
+ret fd
+end
+p = ulong 0
+for b ulong 2097153
+if ge p len gfile
+break
+end
+k = read int fd gfile p sub len gfile p
+if lt k 0
+c = fclose int fd
+ret k
+end
+if eq k 0
+c = fclose int fd
+put gst SFLEN p
+ret long p
+end
+p = add p ulong k
+end
+k = read int fd x 0 1
+c = fclose int fd
+if ne k 0
+ret -27
+end
+put gst SFLEN p
+ret long p
+end
+
+note sm_wratom: gout[0, SOUT) into gpath ".tmp", fsync, then rename over gpath (atomic replace)
+fn sm_wratom to long
+n = get gst SPLEN
+if gt add mul n 2 12 len gpk
+ret -36
+end
+put gpk 0 2
+put gpk 1 0
+put gpk 2 uchar and add n 4 255
+put gpk 3 uchar shr add n 4 8
+for i ulong n
+put gpk add 4 i get gpath i
+end
+put gpk add 4 n 46
+put gpk add 5 n 116
+put gpk add 6 n 109
+put gpk add 7 n 112
+q = add n 8
+put gpk q uchar and n 255
+put gpk add q 1 uchar shr n 8
+for i ulong n
+put gpk add add q 2 i get gpath i
+end
+fd = fopen gpk 4 add n 4 524865 420
+if lt fd 0
+put gst SOUT 0
+ret fd
+end
+r = sm_flush int fd
+s = fsync int fd
+c = fclose int fd
+r = hfe r hfe s c
+if lt r 0
+ret r
+end
+ret renames gpk 0 add q add n 2 0
+end
+
+note sm_wrnew: gout[0, SOUT) into gpath, refusing to replace an existing file (O_EXCL)
+fn sm_wrnew to long
+fd = fopen gpath 0 get gst SPLEN 524993 420
+if lt fd 0
+put gst SOUT 0
+ret fd
+end
+r = sm_flush int fd
+c = fclose int fd
+ret hfe r c
+end
+
+note sm_mkdirp: create gpath and its missing parents (errors surface at the next open)
+fn sm_mkdirp to void
+n = get gst SPLEN
+for i ulong n
+if gt i 0
+if eq get gpath i 47
+r = makedir gpath 0 i 493
+end
+end
+end
+r = makedir gpath 0 n 493
+end

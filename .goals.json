@@ -1,0 +1,7 @@
+{"schema":"goals/v1","project":"synapse-map","goals":[
+{"id":"g1","title":"import: catalog + extra + crumbs + infer.tsv into map.jsonl (contract key order)","status":"implemented"},
+{"id":"g2","title":"where: task routing with lexical + xerj semantic ranking, skills and similar repos","status":"implemented"},
+{"id":"g3","title":"check: orphan, missing/archived/fork/inferred parent and duplicate_purpose findings","status":"implemented"},
+{"id":"g4","title":"new: connected child scaffold, crumb validate, --publish with parent draft PR","status":"implemented"},
+{"id":"g5","title":"Live run: map of all aien-dev repos imported and indexed on the Spark","status":"pending"}
+]}

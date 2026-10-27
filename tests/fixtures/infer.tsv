@@ -1,0 +1,5 @@
+# test rules
+lang	ROOT	language root	language
+vc	ROOT	coordination root	coordination
+lang-*	lang	family prefix	language
+vc-*	vc	family prefix

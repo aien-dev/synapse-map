@@ -1,0 +1,27 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pins
+        id: pins
+        run: echo "omega=$(sed -n 's|^aien-dev/omega-mv@||p' omega.pin)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: aien-dev/omega-mv
+          ref: ${{ steps.pins.outputs.omega }}
+          path: omega-mv
+      - name: Check omc pin
+        run: echo "$(sed -n 's|^omc-sha256 ||p' omega.pin)  omega-mv/seed/out/omc" | sha256sum -c
+      - name: Tests (build synapse-map, then every case; xerj and crumb report NOT_RUN here)
+        env:
+          OMEGA_SRC: ${{ github.workspace }}/omega-mv
+          TEST_ROOT: ${{ runner.temp }}/map-tests
+        run: sh tests/run.sh

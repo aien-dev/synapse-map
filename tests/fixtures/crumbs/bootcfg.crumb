@@ -1,0 +1,1 @@
+{"schema_version":"1.0.0","name":"bootcfg","purpose":"Boot configuration files","layer":"firmware","extensions":{"map":{"parent":"t-org/upfork","parent_status":"CONFIRMED"}}}

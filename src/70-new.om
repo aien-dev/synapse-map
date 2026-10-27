@@ -1,0 +1,379 @@
+note ======== new: scaffold a connected child repo ========
+note Files are created with O_EXCL (an existing file is never replaced) under DIR, which must not hold a
+note .crumb yet. The crumb is then checked by `crumb validate DIR`, run as
+note /usr/bin/env HOME=.. PATH=.. crumb validate DIR (execprog gives an empty environment, no PATH search).
+
+global gnf ulong 32
+
+const SNPO ulong 30
+const SNPL ulong 31
+const SNNO ulong 32
+const SNNL ulong 33
+const SNUO ulong 34
+const SNUL ulong 35
+const SNLO ulong 36
+const SNLL ulong 37
+const SNDI ulong 38
+const SNFI ulong 39
+
+text tfcrumb ".crumb"
+text tfgoals ".goals.json"
+text tfreadme "README.md"
+text tfagents "AGENTS.md"
+text tfspin "synapse.pin"
+text tfppr "PARENT-PR.md"
+text tsynapse "synapse"
+text tdeflay "tool"
+text tc1 "{\"schema_version\":\"1.0.0\",\"name\":"
+text tc2 ",\"extensions\":{\"map\":{\"parent\":"
+text tc3 ",\"parent_status\":\"CONFIRMED\"}}}\n"
+text tg1 "{\"schema\":\"goals/v1\",\"project\":"
+text tg2 ",\"goals\":[{\"id\":\"g1\",\"title\":"
+text tg3 ",\"status\":\"pending\"}]}\n"
+text tgh "https://github.com/"
+text tr1 "Child of ["
+text tr2 "](https://github.com/"
+text tr3 ") at `"
+text tr4 "`.\n\n# "
+text tr5 "\n\n## Connected repos\n\n- Parent: ["
+text tr6 ")\n"
+text ta1 "# "
+text ta2 ": agent brief\n\nPurpose: "
+text ta3 "\nParent: "
+text ta4 "\n\nBefore starting work here, run `synapse-map where \"<task>\"` to confirm this is the right repo, and\n`synapse-map check` after changing this repo's .crumb. New standalone components get their own\nrepo via `synapse-map new`, connected to a parent.\n"
+text tp1 "Add this line under \"Connected repos\" in the README.md of "
+text tp2 ":\n\n- ["
+text tp3 "): "
+text tnexist "synapse-map: refusing to scaffold: .crumb already exists in "
+text tnwrite "synapse-map: cannot create "
+text tenv "/usr/bin/env"
+text tcrumbc "crumb"
+text tvalid "validate"
+text tdefpath "PATH=/usr/local/bin:/usr/bin:/bin"
+text tdefhome "HOME=/"
+text tkdir "dir"
+text tkfiles "files"
+text tkcv "crumb_validate"
+text tpass "PASS"
+text tfail "FAIL"
+text tnotrun "NOT_RUN"
+text tunkref "unknown"
+
+fn sm_ndir t view uchar * to void
+sm_pclr
+sm_parg get gst SNDI
+sm_pc 47
+sm_ptx t
+end
+
+note sm_nput: write gout to DIR/t with O_EXCL and record the name; any failure exits 70 (73 on EEXIST)
+fn sm_nput t view uchar * to void
+sm_ndir t
+w = sm_wrnew
+if lt w 0
+sm_err tnwrite
+k = write 2 gpath 0 get gst SPLEN
+sm_errnl
+sm_die 70
+end
+n = get gst SNFI
+put gnf n sm_pt t
+put gnf add n 16 len t
+put gst SNFI add n 1
+end
+
+fn sm_nq k ulong to void
+sm_oq get gst k get gst add k 1
+end
+
+fn sm_nraw k ulong to void
+sm_op get gst k get gst add k 1
+end
+
+note sm_nrepo: the owner/repo part of the parent (before '@')
+fn sm_nrepo to void
+po = get gst SNPO
+sm_op po sm_pfind po get gst SNPL 64
+end
+
+fn sm_nref to void
+po = get gst SNPO
+pn = get gst SNPL
+q = sm_pfind po pn 64
+if lt q pn
+sm_op add po add q 1 sub sub pn q 1
+end
+end
+
+fn sm_nfiles to void
+sm_ot tc1
+sm_nq SNNO
+sm_okc tkpurp
+sm_nq SNUO
+sm_okc tklay
+sm_nq SNLO
+sm_ot tc2
+sm_nq SNPO
+sm_ot tc3
+sm_nput tfcrumb
+sm_ot tg1
+sm_nq SNNO
+sm_ot tg2
+sm_nq SNUO
+sm_ot tg3
+sm_nput tfgoals
+sm_ot tr1
+sm_nrepo
+sm_ot tr2
+sm_nrepo
+sm_ot tr3
+sm_nref
+sm_ot tr4
+sm_nraw SNNO
+sm_ob 10
+sm_ob 10
+sm_nraw SNUO
+sm_ot tr5
+sm_nrepo
+sm_ot tr2
+sm_nrepo
+sm_ot tr6
+sm_nput tfreadme
+sm_ot ta1
+sm_nraw SNNO
+sm_ot ta2
+sm_nraw SNUO
+sm_ot ta3
+sm_nraw SNPO
+sm_ot ta4
+sm_nput tfagents
+po = get gst SNPO
+q = sm_pfind po get gst SNPL 64
+s = sm_pfind po q 47
+if lt s q
+if sm_pteq add po add s 1 sub sub q s 1 tsynapse
+sm_nraw SNPO
+sm_ob 10
+sm_nput tfspin
+end
+end
+sm_ot tp1
+sm_nrepo
+sm_ot tp2
+sm_nraw SNNO
+sm_ot tr2
+if lt s q
+sm_op po add s 1
+end
+sm_nraw SNNO
+sm_ot tp3
+sm_nraw SNUO
+sm_ob 10
+sm_nput tfppr
+end
+
+note sm_pkadd: append one record (pool slice) to the packed list in gpk at offset p; the slice is also
+note kept in garv for --dry-run printing; returns the new offset
+fn sm_pkadd p ulong o ulong n ulong to ulong
+k = get gst SPKN
+if or gt add add p n 2 len gpk ge k 64
+put gst SOVF 4
+ret p
+end
+put gpk p uchar and n 255
+put gpk add p 1 uchar shr n 8
+for i ulong n
+put gpk add add p 2 i get gpool add o i
+end
+put gpk 0 uchar add get gpk 0 1
+put garv mul k 2 o
+put garv add mul k 2 1 n
+put gst SPKN add k 1
+ret add add p 2 n
+end
+
+fn sm_pktx p ulong t view uchar * to ulong
+o = sm_pt t
+ret sm_pkadd p o len t
+end
+
+note sm_nvalid: 0 PASS, 1 FAIL, 2 NOT_RUN (fork, exec or wait failed, or crumb missing: exit 127)
+fn sm_nvalid to ulong
+put gpk 0 0
+put gpk 1 0
+put gst SPKN 0
+p = sm_pktx 2 tenv
+h = sm_env thomee
+if eq h SNONE
+p = sm_pktx p tdefhome
+else
+p = sm_pkadd p sub h 5 add get gst SSLEN 5
+end
+e = sm_env tpathe
+if eq e SNONE
+p = sm_pktx p tdefpath
+else
+p = sm_pkadd p sub e 5 add get gst SSLEN 5
+end
+p = sm_pktx p tcrumbc
+p = sm_pktx p tvalid
+d = sm_apool get gst SNDI
+p = sm_pkadd p d get gst SSLEN
+if ne get gst SOVF 0
+put gst SOVF 0
+ret 2
+end
+c = sm_pkrun p
+if eq c 0
+ret 0
+end
+if or eq c 127 ge c 256
+ret 2
+end
+ret 1
+end
+
+fn sm_cnew to int
+np = sm_argscan tvfnew tswnew
+dry = sm_aflag tfdry
+pub = sm_aflag tfpub
+if and gt dry 0 eq pub 0
+sm_err tpubdry
+sm_die 64
+end
+put gst SDRY dry
+if ne np 1
+sm_usage
+end
+ni = get gst SSLEN
+pai = sm_aval tfparent
+ui = sm_aval tfpurp
+di = sm_aval tfdir
+if or eq pai 0 or eq ui 0 eq di 0
+sm_usage
+end
+if not sm_nameok ni
+sm_usage
+end
+put gst SNDI di
+o = sm_apool ni
+put gst SNNO o
+put gst SNNL get gst SSLEN
+o = sm_apool ui
+put gst SNUO o
+put gst SNUL get gst SSLEN
+li = sm_aval tflayer
+if gt li 0
+o = sm_apool li
+put gst SNLL get gst SSLEN
+else
+o = sm_pt tdeflay
+put gst SNLL len tdeflay
+end
+put gst SNLO o
+sm_home
+sm_nparent pai
+sm_ndir tfcrumb
+if eq faccess gpath 0 get gst SPLEN 0 0
+sm_err tnexist
+k = write 2 gpath 0 get gst SPLEN
+sm_errnl
+sm_die 64
+end
+sm_pclr
+sm_parg di
+sm_mkdirp
+put gst SNFI 0
+sm_nfiles
+v = sm_nvalid
+sm_ob 123
+sm_ok tkok
+sm_obool ne v 1
+sm_okc tkdir
+dq = sm_apool di
+sm_oq dq get gst SSLEN
+sm_okc tkfiles
+sm_ob 91
+for i ulong get gst SNFI
+if gt i 0
+sm_ob 44
+end
+sm_oq get gnf i get gnf add i 16
+end
+sm_ob 93
+sm_okc tkcv
+if eq v 0
+sm_otq tpass
+end
+if eq v 1
+sm_otq tfail
+end
+if eq v 2
+sm_otq tnotrun
+end
+sm_ob 125
+sm_ob 10
+if eq v 1
+sm_die 1
+end
+if gt pub 0
+sm_publish
+end
+ret 0
+end
+
+note sm_nparent: normalise --parent to owner/repo@ref; without @ref the parent's default branch from the
+note map (when a map exists) is used, else @unknown
+fn sm_nparent pai ulong to void
+a = sm_apool pai
+an = get gst SSLEN
+if or eq an 0 eq get gab sm_ao pai 64
+sm_usage
+end
+o = sm_pfull a an
+n = get gst SSLEN
+if lt sm_pfind o n 64 n
+put gst SNPO o
+put gst SNPL n
+ret
+end
+sm_phome tmapf
+x = sm_rdfile
+if ge x 0
+y = sm_jload 3 0
+end
+r = sm_find o n
+s = get gst SPOOL
+z = sm_pcp o n
+sm_pb 64
+if ne r SNONE
+if gt sm_fl r FDEF 0
+z = sm_pcp sm_fo r FDEF sm_fl r FDEF
+else
+z = sm_pt tunkref
+end
+else
+z = sm_pt tunkref
+end
+put gst SNPO s
+put gst SNPL sub get gst SPOOL s
+end
+
+note sm_nameok: a repo name is 1..100 bytes of letters, digits, '.', '_' and '-', not starting with '.'
+fn sm_nameok i ulong to bool
+o = sm_ao i
+n = sm_al i
+if or eq n 0 gt n 100
+ret false
+end
+if eq get gab o 46
+ret false
+end
+for j ulong n
+c = sm_lc get gab add o j
+if not or sm_isword c or eq c 46 or eq c 95 eq c 45
+ret false
+end
+end
+ret true
+end

@@ -1,0 +1,5 @@
+# synapse-map topic terms: words a repo's catalog description does not carry but its sources do.
+# Columns: repo<TAB>terms<TAB>evidence (path in the repo at a pinned commit). Terms join the
+# lexical index for `where` with name weight; evidence is kept for review, never emitted.
+omega-mv	tls tls13 handshake x509 certificate https json http client compiler seed omc gates sha256 blake3 spirv wasm	aien-dev/omega-mv@e5b32567:om/tls/README.md, seed/json, seed/net, om/sha256, om/blake3, seed/spirv, seed/wasm
+synapse	source control version control changesets git radicle coordination agents integration	aien-dev/synapse@099a980f:README.md ("source control for AI agents")

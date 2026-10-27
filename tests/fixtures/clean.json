@@ -1,0 +1,4 @@
+{"generated_at":"2026-10-27T00:00:00Z","org":"t-org","repos":[
+{"name":"lang","description":"Omega language and compiler","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""},
+{"name":"vc","description":"Source control for AI agents","url":"","default_branch":"main","fork":false,"pushed_at":null,"archived":false,"brief":""}
+]}

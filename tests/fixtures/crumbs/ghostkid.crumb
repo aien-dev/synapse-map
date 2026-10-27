@@ -1,0 +1,1 @@
+{"schema_version":"1.0.0","name":"ghostkid","purpose":"Points at a parent the map does not have","layer":"tool","extensions":{"map":{"parent":"t-org/ghost@main","parent_status":"CONFIRMED"}}}

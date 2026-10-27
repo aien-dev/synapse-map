@@ -1,0 +1,78 @@
+note ======== entry ========
+text tcimport "import"
+text tcindex "index"
+text tcwhere "where"
+text tctree "tree"
+text tccheck "check"
+text tcnew "new"
+text tchelp "--help"
+text tch "-h"
+text tdot "."
+
+note sm_bindir: directory of argv[0] into the pool (".", when argv[0] has no '/')
+fn sm_bindir to void
+o = sm_ao 0
+n = sm_al 0
+s = n
+for i ulong n
+if eq get gab add o i 47
+s = i
+end
+end
+if eq s n
+p = sm_pt tdot
+put gst SBINO p
+put gst SBINL 1
+ret
+end
+p = sm_apool 0
+put gst SBINO p
+put gst SBINL s
+end
+
+fn main to int
+x = sm_args
+if lt x 0
+sm_usage
+end
+if lt get gst SARGC 2
+sm_usage
+end
+if or sm_aeq 1 tchelp sm_aeq 1 tch
+sm_err tusage
+ret 0
+end
+put gst SXIP 2130706433
+put gst SXPORT 9200
+o = sm_pt tdefidx
+put gst SIDXO o
+put gst SIDXL len tdefidx
+o = sm_pt tdeforg
+put gst SORGO o
+put gst SORGL len tdeforg
+sm_bindir
+c = int 0
+if sm_aeq 1 tcimport
+c = sm_cimport
+end
+if sm_aeq 1 tcindex
+c = sm_cindex
+end
+if sm_aeq 1 tcwhere
+c = sm_cwhere
+end
+if sm_aeq 1 tctree
+c = sm_ctree
+end
+if sm_aeq 1 tccheck
+c = sm_ccheck
+end
+if sm_aeq 1 tcnew
+c = sm_cnew
+end
+if not or sm_aeq 1 tcimport or sm_aeq 1 tcindex or sm_aeq 1 tcwhere or sm_aeq 1 tctree or sm_aeq 1 tccheck sm_aeq 1 tcnew
+sm_usage
+end
+sm_die c
+ret c
+end

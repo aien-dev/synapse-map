@@ -1,0 +1,351 @@
+note ======== infer.tsv rules, topics.tsv terms, parent resolution ========
+note infer.tsv: pattern<TAB>parent<TAB>why[<TAB>layer]; '#' lines and blank lines are skipped.
+note pattern: a case-insensitive glob (* ?) on the bare repo name, or desc:<substring> of the purpose.
+note parent: ROOT, NONE, repo, owner/repo, optionally @ref. The first matching rule wins; a rule that
+note would make a repo its own parent is skipped.
+
+note rules: (pattern, parent, why, layer) offset/length pairs, and the file line number
+global grule ulong 4096
+global grln ulong 512
+global gtf ulong 8
+
+text tsroot "ROOT"
+text tsnone "NONE"
+text tsconf "CONFIRMED"
+text tsinf "INFERRED"
+text tcrumb "crumb"
+text tunknown "unknown"
+text tdescp "desc:"
+
+fn sm_pfile p ulong n ulong to ulong
+o = get gst SPOOL
+for i ulong n
+sm_pb get gfile add p i
+end
+ret o
+end
+
+note sm_tsv: split gfile[0, SFLEN) into tab-separated rows of kind 1 (rules) or 2 (topics)
+fn sm_tsv kind ulong to long
+n = get gst SFLEN
+p = ulong 0
+ln = ulong 0
+put gst SBAD 0
+while lt p n bound 999999
+e = p
+while lt e n bound 999999
+if eq get gfile e 10
+break
+end
+e = add e 1
+end
+ln = add ln 1
+m = sub e p
+if gt m 0
+if eq get gfile sub e 1 13
+m = sub m 1
+end
+end
+skip = sm_blank p m
+if not skip
+skip = eq get gfile p 35
+end
+if not skip
+nf = ulong 0
+s = p
+for i ulong add m 1
+de = eq i m
+if not de
+de = eq get gfile add p i 9
+end
+if de
+if lt nf 4
+put gtf mul nf 2 sm_pfile s sub add p i s
+put gtf add mul nf 2 1 sub add p i s
+end
+nf = add nf 1
+s = add add p i 1
+end
+end
+x = sm_tsvrow kind nf ln
+if lt x 0
+put gst SBAD ln
+ret x
+end
+end
+p = add e 1
+end
+ret 0
+end
+
+fn sm_tsvrow kind ulong nf ulong ln ulong to long
+if eq kind 2
+ret sm_toprow nf
+end
+if lt nf 3
+ret -65
+end
+if or eq get gtf 1 0 eq get gtf 3 0
+ret -65
+end
+i = get gst SNRUL
+if ge i 512
+ret -12
+end
+b = mul i 8
+for f ulong 6
+put grule add b f get gtf f
+end
+put grule add b 6 0
+put grule add b 7 0
+if gt nf 3
+put grule add b 6 get gtf 6
+put grule add b 7 get gtf 7
+end
+put grln i ln
+put gst SNRUL add i 1
+ret 0
+end
+
+note sm_toprow: repo<TAB>terms<TAB>evidence; terms are appended to the record's topic field
+fn sm_toprow nf ulong to long
+if lt nf 2
+ret -65
+end
+r = sm_findany get gtf 0 get gtf 1
+if eq r SNONE
+ret 0
+end
+o = sm_pcp sm_fo r FTOP sm_fl r FTOP
+sm_pb 32
+x = sm_pcp get gtf 2 get gtf 3
+sm_fset r FTOP o add add sm_fl r FTOP 1 get gtf 3
+ret 0
+end
+
+note sm_findany: record by owner/repo, or by bare name when the slice has no '/'
+fn sm_findany o ulong n ulong to ulong
+if lt sm_pfind o n 47 n
+ret sm_find o n
+end
+for r ulong get gst SNREC
+if sm_pieq sm_fo r FNAME sm_fl r FNAME o n
+ret r
+end
+end
+ret SNONE
+end
+
+fn sm_gat o ulong n ulong i ulong to uchar
+if lt i n
+ret sm_lc get gpool add o i
+end
+ret 0
+end
+
+note sm_glob: case-insensitive wildcard match of pattern (po, pn) against (so, sn); * any run, ? one byte
+fn sm_glob po ulong pn ulong so ulong sn ulong to bool
+p = ulong 0
+s = ulong 0
+st = SNONE
+mk = ulong 0
+while lt s sn bound 999999
+pc = sm_gat po pn p
+sc = sm_lc get gpool add so s
+one = false
+if and ne pc 42 ne pc 0
+one = or eq pc 63 eq pc sc
+end
+if one
+p = add p 1
+s = add s 1
+else
+if eq pc 42
+st = p
+mk = s
+p = add p 1
+else
+if eq st SNONE
+ret false
+end
+p = add st 1
+mk = add mk 1
+s = mk
+end
+end
+end
+while eq sm_gat po pn p 42 bound 999999
+p = add p 1
+end
+ret eq p pn
+end
+
+note sm_isub: case-insensitive substring test of needle (no, nn) in haystack (ho, hn)
+fn sm_isub ho ulong hn ulong no ulong nn ulong to bool
+if gt nn hn
+ret false
+end
+for i ulong add sub hn nn 1
+m = true
+for j ulong nn
+if ne sm_lc get gpool add ho add i j sm_lc get gpool add no j
+m = false
+break
+end
+end
+if m
+ret true
+end
+end
+ret false
+end
+
+fn sm_rmatch i ulong r ulong to bool
+po = get grule mul i 8
+pn = get grule add mul i 8 1
+if gt pn 5
+if sm_pteq po 5 tdescp
+ret sm_isub sm_fo r FPUR sm_fl r FPUR add po 5 sub pn 5
+end
+end
+ret sm_glob po pn sm_fo r FNAME sm_fl r FNAME
+end
+
+note sm_pfull: owner/repo[@ref] for a parent slice, prefixing the catalog org when no owner is given
+fn sm_pfull o ulong n ulong to ulong
+s = get gst SPOOL
+q = sm_pfind o n 64
+if ge sm_pfind o q 47 q
+x = sm_pcp get gst SORGO get gst SORGL
+sm_pb 47
+end
+y = sm_pcp o n
+put gst SSLEN sub get gst SPOOL s
+ret s
+end
+
+note sm_isself: parent slice (o, n) names record r itself
+fn sm_isself r ulong o ulong n ulong to bool
+q = sm_pfind o n 64
+ret sm_pieq o q sm_fo r FREPO sm_fl r FREPO
+end
+
+fn sm_setrule r ulong i ulong to void
+o = get gst SPOOL
+sm_pb 76
+sm_pnum get grln i
+sm_pb 32
+x = sm_pcp get grule mul i 8 get grule add mul i 8 1
+sm_fset r FRULE o sub get gst SPOOL o
+sm_ks r KRUL add i 1
+end
+
+note sm_infer: apply the first matching rule to record r; a crumb-confirmed record only takes the layer
+fn sm_infer r ulong to void
+cf = ne sm_kg r KCONF 0
+for i ulong get gst SNRUL
+b = mul i 8
+if sm_rmatch i r
+po = get grule add b 2
+pn = get grule add b 3
+skip = false
+if not or cf or sm_pteq po pn tsroot sm_pteq po pn tsnone
+o = sm_pfull po pn
+skip = sm_isself r o get gst SSLEN
+end
+if not skip
+if and eq sm_fl r FLAY 0 gt get grule add b 7 0
+sm_fset r FLAY get grule add b 6 get grule add b 7
+end
+if cf
+ret
+end
+sm_setrule r i
+if sm_pteq po pn tsroot
+sm_fsett r FPST tsroot
+sm_ks r KPNUL 1
+ret
+end
+if sm_pteq po pn tsnone
+sm_fsett r FPST tsnone
+sm_ks r KPNUL 1
+ret
+end
+o = sm_pfull po pn
+sm_fset r FPAR o get gst SSLEN
+sm_fsett r FPST tsinf
+sm_ks r KPNUL 0
+ret
+end
+end
+end
+if not cf
+sm_fsett r FPST tsnone
+sm_ks r KPNUL 1
+sm_fset r FRULE 0 0
+end
+end
+
+note sm_resolve: crumb parent (CONFIRMED), else rules; purpose and layer fall back to the crumb
+fn sm_resolve r ulong to void
+sm_ks r KCONF 0
+sm_ks r KPNUL 1
+sm_fset r FPAR 0 0
+sm_fset r FRULE 0 0
+if gt sm_fl r FCPAR 0
+o = sm_pfull sm_fo r FCPAR sm_fl r FCPAR
+n = get gst SSLEN
+if not sm_isself r o n
+sm_fset r FPAR o n
+sm_fsett r FPST tsconf
+sm_fsett r FRULE tcrumb
+sm_ks r KCONF 1
+sm_ks r KPNUL 0
+end
+end
+sm_infer r
+if eq sm_fl r FLAY 0
+sm_fset r FLAY sm_fo r FCLAY sm_fl r FCLAY
+end
+if eq sm_fl r FPUR 0
+sm_fset r FPUR sm_fo r FCPUR sm_fl r FCPUR
+end
+end
+
+note sm_refs: pin every parent without @ref to the parent's default branch, or @unknown
+fn sm_refs to void
+for r ulong get gst SNREC
+if eq sm_kg r KPNUL 0
+po = sm_fo r FPAR
+pn = sm_fl r FPAR
+if eq sm_pfind po pn 64 pn
+p = sm_find po pn
+o = sm_pcp po pn
+sm_pb 64
+if ne p SNONE
+if gt sm_fl p FDEF 0
+x = sm_pcp sm_fo p FDEF sm_fl p FDEF
+else
+x = sm_pt tunknown
+end
+else
+x = sm_pt tunknown
+end
+sm_fset r FPAR o sub get gst SPOOL o
+end
+end
+end
+end
+
+note sm_link: parent record index + 1 into KPIDX (0 when null or not in the map)
+fn sm_link to void
+for r ulong get gst SNREC
+sm_ks r KPIDX 0
+if eq sm_kg r KPNUL 0
+p = sm_find sm_fo r FPAR sm_parref r
+if ne p SNONE
+sm_ks r KPIDX add p 1
+end
+end
+end
+end

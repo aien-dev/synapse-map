@@ -1,0 +1,514 @@
+note ======== where and check ========
+note where: lexical score = sum over shared query tokens of idf * (1 + boost), boost 1 for name and
+note topic tokens; archived repos are halved. Lexical and semantic (xerj) scores are each scaled to
+note their maximum (1000), then combined 6:4. Without xerj the lexical score alone ranks.
+
+text tkscore2 "score"
+text tkwhy "why"
+text tksimil "similar"
+text tkwarn "warn"
+text twunr "xerj unreachable"
+text twidx "xerj index unavailable; run synapse-map index"
+text twterms "terms "
+text twnone "no shared terms"
+text twsem "; semantic "
+text tnomatch "synapse-map: no repo matched the task\n"
+text tkkind "kind"
+text tkother "other"
+text tkjac "jaccard"
+text tksem "semantic"
+text tforphan "orphan"
+text tfmiss "missing_parent"
+text tfarch "archived_parent"
+text tfinfp "inferred_parent"
+text tfdup "duplicate_purpose"
+text tffork "fork_parent"
+
+fn sm_wlex to void
+mx = ulong 0
+for r ulong get gst SNREC
+s = ulong 0
+for i ulong sm_sn SQSET
+t = and sm_sget SQSET i 4294967295
+h = sm_shas r t
+if gt h 0
+s = add s mul sm_idf t h
+end
+end
+if ne sm_kg r KARCH 0
+s = div s 2
+end
+put gsc r s
+if gt s mx
+mx = s
+end
+end
+put gst SMAXL mx
+end
+
+note sm_semfill: xerj hits (gxr) into gsm (repos) or gsks (skills); returns the maximum score
+fn sm_semfill sk bool to ulong
+mx = ulong 0
+for i ulong get gst SNXR
+c = get gxr mul i 2
+v = get gxr add mul i 2 1
+if sk
+if ge c 1048576
+put gsks sub c 1048576 v
+end
+else
+if lt c 1048576
+if ne sm_kg c KARCH 0
+v = div v 2
+end
+put gsm c v
+end
+end
+if gt v mx
+mx = v
+end
+end
+ret mx
+end
+
+fn sm_scale v ulong mx ulong to ulong
+if eq mx 0
+ret 0
+end
+ret div mul v 1000 mx
+end
+
+fn sm_wcomb hs bool to void
+ml = get gst SMAXL
+ms = get gst SMAXS
+for r ulong get gst SNREC
+l = sm_scale get gsc r ml
+if hs
+put gcb r div add mul l 6 mul sm_scale get gsm r ms 4 10
+else
+put gcb r l
+end
+put gpick r 0
+end
+end
+
+note sm_skscore: task score per skill (lexical over name and description, plus semantic when present)
+fn sm_skscore hs bool ms ulong to void
+mx = ulong 0
+for s ulong get gst SNSKL
+sm_sclr SXSET
+sm_tokz get gsk mul s 4 get gsk add mul s 4 1 SXSET 0
+sm_tokz get gsk add mul s 4 2 get gsk add mul s 4 3 SXSET 0
+v = ulong 0
+for i ulong sm_sn SQSET
+t = and sm_sget SQSET i 4294967295
+if gt sm_shas SXSET t 0
+v = add v sm_idf t
+end
+end
+put gskl s v
+if gt v mx
+mx = v
+end
+end
+for s ulong get gst SNSKL
+l = sm_scale get gskl s mx
+if hs
+put gskc s div add mul l 6 mul sm_scale get gsks s ms 4 10
+else
+put gskc s l
+end
+end
+end
+
+note sm_skrow: up to 3 skills for row r (task score, +300 when the skill names the repo)
+fn sm_skrow r ulong to void
+sm_okc tkskills
+sm_ob 91
+p1 = SNONE
+p2 = SNONE
+for k ulong 3
+b = SNONE
+bv = ulong 0
+for s ulong get gst SNSKL
+if and ne s p1 ne s p2
+v = get gskc s
+if gt v 0
+no = get gsk mul s 4
+nl = get gsk add mul s 4 1
+nm = sm_isub no nl sm_fo r FNAME sm_fl r FNAME
+if not nm
+nm = sm_isub get gsk add mul s 4 2 get gsk add mul s 4 3 sm_fo r FNAME sm_fl r FNAME
+end
+if nm
+v = add v 300
+end
+end
+if gt v bv
+bv = v
+b = s
+end
+end
+end
+if eq b SNONE
+break
+end
+if gt k 0
+sm_ob 44
+end
+sm_oq get gsk mul b 4 get gsk add mul b 4 1
+if eq k 0
+p1 = b
+else
+p2 = b
+end
+end
+sm_ob 93
+end
+
+note sm_simrow: up to 3 other repos with the highest Jaccard index of doc sets
+fn sm_simrow r ulong to void
+sm_okc tksimil
+sm_ob 91
+p1 = SNONE
+p2 = SNONE
+for k ulong 3
+b = SNONE
+bv = ulong 0
+for o ulong get gst SNREC
+if and ne o r and ne o p1 ne o p2
+v = sm_jac r o
+if gt v bv
+bv = v
+b = o
+end
+end
+end
+if eq b SNONE
+break
+end
+if gt k 0
+sm_ob 44
+end
+sm_fq b FREPO
+if eq k 0
+p1 = b
+else
+p2 = b
+end
+end
+sm_ob 93
+end
+
+fn sm_why r ulong to void
+sm_okc tkwhy
+sm_ob 34
+n = ulong 0
+for i ulong sm_sn SQSET
+t = and sm_sget SQSET i 4294967295
+if gt sm_shas r t 0
+if eq n 0
+sm_ot twterms
+else
+sm_ob 44
+end
+sm_otext get gtko t get gtkl t
+n = add n 1
+end
+end
+if eq n 0
+sm_ot twnone
+end
+if gt get gsm r 0
+sm_ot twsem
+sm_omil sm_scale get gsm r get gst SMAXS
+end
+sm_ob 34
+end
+
+fn sm_wrow r ulong to void
+sm_ob 123
+sm_ok tkrepo
+sm_fq r FREPO
+sm_okc tkscore2
+sm_omil get gcb r
+sm_okc tkpurp
+sm_fq r FPUR
+sm_okc tkpar
+if ne sm_kg r KPNUL 0
+sm_onull
+else
+sm_fq r FPAR
+end
+sm_why r
+sm_skrow r
+sm_simrow r
+sm_ob 125
+sm_ob 10
+end
+
+fn sm_warn t view uchar * to void
+sm_ob 123
+sm_ok tkwarn
+sm_otq t
+sm_ob 125
+sm_ob 10
+end
+
+fn sm_cwhere to int
+np = sm_argscan tvfwh tswnox
+if ne np 1
+sm_usage
+end
+qi = get gst SSLEN
+lim = ulong 5
+l = sm_aval tflimit
+if gt l 0
+lim = sm_anum l
+if or eq lim 0 gt lim 100
+sm_err tbadnum
+sm_err tflimit
+sm_errnl
+sm_die 64
+end
+end
+sm_home
+sm_xopts
+sm_loadmap
+sm_loadtop
+sm_loadskl
+sm_tokrec
+qo = sm_apool qi
+qn = get gst SSLEN
+sm_sclr SQSET
+sm_tokz qo qn SQSET 0
+sm_wlex
+for r ulong get gst SNREC
+put gsm r 0
+end
+for s ulong get gst SNSKL
+put gsks s 0
+end
+hs = false
+ms2 = ulong 0
+if eq get gst SXST 0
+x = sm_xsearch qo qn 0 25
+if ge x 0
+hs = true
+put gst SMAXS sm_semfill false
+if gt get gst SNSKL 0
+y = sm_xsearch qo qn 1 10
+if ge y 0
+ms2 = sm_semfill true
+end
+end
+else
+if eq get gst SXST 2
+sm_warn twunr
+else
+sm_warn twidx
+end
+end
+end
+put gst SHSEM 0
+sm_wcomb hs
+sm_skscore hs ms2
+nrow = ulong 0
+for k ulong lim
+b = SNONE
+bv = ulong 0
+for r ulong get gst SNREC
+if eq get gpick r 0
+if gt get gcb r bv
+bv = get gcb r
+b = r
+end
+end
+end
+if eq b SNONE
+break
+end
+put gpick b 1
+sm_wrow b
+nrow = add nrow 1
+end
+if eq nrow 0
+sm_err tnomatch
+sm_die 4
+end
+ret 0
+end
+
+note ---- check ----
+fn sm_fhead t view uchar * r ulong to void
+sm_ob 123
+sm_ok tkkind
+sm_otq t
+sm_okc tkrepo
+sm_fq r FREPO
+end
+
+fn sm_fpar r ulong to void
+sm_okc tkpar
+sm_fq r FPAR
+end
+
+fn sm_fend to void
+sm_ob 125
+sm_ob 10
+end
+
+note sm_semtop: xerj top-3 neighbours (codes + 1) of every live record's purpose into gtop
+fn sm_semtop to bool
+for r ulong get gst SNREC
+put gtop mul r 4 0
+put gtop add mul r 4 1 0
+put gtop add mul r 4 2 0
+if and eq sm_kg r KARCH 0 gt sm_fl r FPUR 0
+if ne get gst SXST 2
+x = sm_xsearch sm_fo r FPUR sm_fl r FPUR 0 4
+if lt x 0
+ret false
+end
+k = ulong 0
+for i ulong get gst SNXR
+c = get gxr mul i 2
+if and ne c r lt k 3
+put gtop add mul r 4 k add c 1
+k = add k 1
+end
+end
+end
+end
+end
+ret ne get gst SXST 2
+end
+
+fn sm_isnb a ulong b ulong to bool
+for i ulong 3
+if eq get gtop add mul a 4 i add b 1
+ret true
+end
+end
+ret false
+end
+
+note sm_cdup: duplicate_purpose pairs; returns the number of findings
+fn sm_cdup th ulong hs bool to ulong
+nf = ulong 0
+for a ulong get gst SNREC
+for b ulong get gst SNREC
+live = and lt a b and eq sm_kg a KARCH 0 eq sm_kg b KARCH 0
+if live
+live = and gt sm_fl a FPUR 0 gt sm_fl b FPUR 0
+end
+if live
+j = sm_jac add 1024 a add 1024 b
+nb = false
+if hs
+nb = and sm_isnb a b sm_isnb b a
+end
+if or ge j th and nb ge mul j 2 th
+sm_fhead tfdup a
+sm_okc tkother
+sm_fq b FREPO
+sm_okc tkjac
+sm_omil j
+sm_okc tksem
+if hs
+sm_obool or sm_isnb a b sm_isnb b a
+else
+sm_onull
+end
+sm_fend
+nf = add nf 1
+end
+end
+end
+end
+ret nf
+end
+
+text tdthr "synapse-map: xerj unreachable; duplicate_purpose uses Jaccard only (semantic null)\n"
+
+fn sm_ccheck to int
+np = sm_argscan tvfchk tswnox
+if ne np 0
+sm_usage
+end
+th = ulong 500
+m = sm_aval tfminj
+if gt m 0
+th = sm_anum m
+if or eq th SNONE gt th 1000
+sm_err tbadnum
+sm_err tfminj
+sm_errnl
+sm_die 64
+end
+end
+sm_home
+sm_xopts
+sm_loadmap
+sm_tokrec
+nf = ulong 0
+for r ulong get gst SNREC
+nf = add nf sm_crec r
+end
+hs = false
+if eq get gst SNOX 0
+hs = sm_semtop
+if not hs
+sm_err tdthr
+end
+end
+nf = add nf sm_cdup th hs
+if gt nf 0
+sm_die 1
+end
+ret 0
+end
+
+note sm_crec: per-record findings (orphan, missing, archived, fork and inferred parents)
+fn sm_crec r ulong to ulong
+nf = ulong 0
+if sm_feqt r FPST tsnone
+sm_fhead tforphan r
+sm_okc tkrule
+sm_fq r FRULE
+sm_fend
+nf = add nf 1
+end
+if eq sm_kg r KPNUL 0
+p = sm_kg r KPIDX
+if eq p 0
+sm_fhead tfmiss r
+sm_fpar r
+sm_fend
+nf = add nf 1
+else
+q = sub p 1
+if and ne sm_kg q KARCH 0 eq sm_kg r KARCH 0
+sm_fhead tfarch r
+sm_fpar r
+sm_fend
+nf = add nf 1
+end
+if and ne sm_kg q KFORK 0 eq sm_kg r KFORK 0
+sm_fhead tffork r
+sm_fpar r
+sm_fend
+nf = add nf 1
+end
+end
+end
+if sm_feqt r FPST tsinf
+sm_fhead tfinfp r
+sm_fpar r
+sm_okc tkrule
+sm_fq r FRULE
+sm_fend
+nf = add nf 1
+end
+ret nf
+end
