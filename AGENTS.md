@@ -1,5 +1,8 @@
 # synapse-map: agent brief
 
+Development follows [Human-Directed Agentic Engineering (HDAE)](README.md#human-directed-agentic-engineering).
+The README defines the human and agent responsibilities and cites Gregory M. Kurtzer's report.
+
 Parent: aien-dev/synapse (`synapse.pin`). Language: seeded Omega, `src/*.om`, pinned by `omega.pin`.
 
 ## When to call it
