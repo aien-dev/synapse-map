@@ -1,16 +1,28 @@
 {
-  "schema_version": "1.0.0",
-  "name": "synapse-map",
-  "purpose": "Repo map for AI lanes: imports the aien-dev catalog and crumbs into map.jsonl with confirmed or inferred parents, answers where-does-this-task-go, checks the tree, scaffolds connected child repos",
-  "layer": "coordination",
-  "invariants": [
-    "stdout is JSONL only; human text goes to stderr",
-    "map.jsonl is replaced atomically; parents are CONFIRMED only from a crumb's extensions.map"
-  ],
   "extensions": {
+    "generated": {
+      "children": [],
+      "children_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiled_at": "2026-10-28T21:31:25Z",
+      "compiler": "crumb-compile/1",
+      "digest": "sha256:bde209eb51202e09f3c411607f5bd87d615b554e93a3729bd6db5c672a850c62",
+      "evidence_files": 0,
+      "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "files": 31,
+      "generated_at_commit": "c5b084681cd26113cd98023d0764930036144368",
+      "source_tree": "sha256:a415ea36ba88ae8f2e2927e7d98a3e4657c904f62fe4f5674314a95c7c737bde"
+    },
     "map": {
       "parent": "aien-dev/synapse@099a980fedab8a6797bbf0358b8c5502c8045142",
       "parent_status": "CONFIRMED"
     }
-  }
+  },
+  "invariants": [
+    "stdout is JSONL only; human text goes to stderr",
+    "map.jsonl is replaced atomically; parents are CONFIRMED only from a crumb's extensions.map"
+  ],
+  "layer": "coordination",
+  "name": "synapse-map",
+  "purpose": "Repo map for AI lanes: imports the aien-dev catalog and crumbs into map.jsonl with confirmed or inferred parents, answers where-does-this-task-go, checks the tree, scaffolds connected child repos",
+  "schema_version": "1.0.0"
 }
